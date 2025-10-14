@@ -292,5 +292,143 @@ document.documentElement.style.scrollBehavior = "smooth";
 document.body.style.overflowY = "scroll";
 </script>
 
+<script type="module">
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-functions.js";
+
+const auth = getAuth();
+const functions = getFunctions();
+
+let currentUser = null;
+onAuthStateChanged(auth, (u) => currentUser = u);
+
+window.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Insert') return;
+  if (!currentUser || currentUser.email !== "kinzudev@gmail.com") return;
+
+  const existing = document.getElementById("adminPanel");
+  if (existing) { existing.remove(); return; }
+  createAdminPanel();
+});
+
+function createAdminPanel() {
+  const panel = document.createElement('div');
+  panel.id = 'adminPanel';
+  panel.style.cssText = `
+    position:fixed;right:18px;top:80px;z-index:99999;
+    width:380px;background:linear-gradient(180deg,#111,#0e0e0e);
+    border-radius:12px;padding:16px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.6);
+    color:#fff;font-family:Arial,Helvetica,sans-serif;
+  `;
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0;font-size:16px">Panel Admin</h3>
+      <button id="closeAdminPanel" style="background:#222;border:none;color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer">✕</button>
+    </div>
+
+    <select id="adminAction" style="width:100%;padding:8px;border-radius:8px;background:#181818;color:#fff;border:1px solid #333;margin-bottom:12px">
+      <option value="robux">Añadir Robux</option>
+      <option value="item">Regalar Ítem</option>
+    </select>
+
+    <!-- Campos para Robux -->
+    <div id="robuxFields">
+      <input id="robuxEmail" type="email" placeholder="Email del destinatario" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="robuxAmount" type="number" placeholder="Cantidad de Robux" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <button id="sendRobuxBtn" style="background:#0a84ff;border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%">Enviar Robux</button>
+    </div>
+
+    <!-- Campos para Ítems -->
+    <div id="itemFields" style="display:none">
+      <input id="itemEmail" type="email" placeholder="Email del destinatario" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="itemName" type="text" placeholder="Nombre del ítem" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="itemImage" type="text" placeholder="URL de imagen" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="itemTagText" type="text" placeholder="Texto del tag (opcional)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="itemTagBg" type="text" placeholder="Color fondo tag (#ff0000)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <input id="itemTagColor" type="text" placeholder="Color texto tag (#ffffff)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <button id="sendItemBtn" style="background:#00c853;border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%">Enviar Ítem</button>
+    </div>
+
+    <div id="adminMsg" style="margin-top:10px;font-size:13px;color:#ccc"></div>
+  `;
+  document.body.appendChild(panel);
+
+  document.getElementById("closeAdminPanel").onclick = () => panel.remove();
+
+  const adminAction = document.getElementById("adminAction");
+  const robuxFields = document.getElementById("robuxFields");
+  const itemFields = document.getElementById("itemFields");
+
+  adminAction.onchange = () => {
+    const action = adminAction.value;
+    robuxFields.style.display = action === "robux" ? "block" : "none";
+    itemFields.style.display = action === "item" ? "block" : "none";
+  };
+
+  // ======== AÑADIR ROBUX ========
+  document.getElementById("sendRobuxBtn").onclick = async () => {
+    const msg = document.getElementById("adminMsg");
+    const email = document.getElementById("robuxEmail").value.trim().toLowerCase();
+    const amount = Number(document.getElementById("robuxAmount").value || 0);
+
+    if (!email || amount <= 0) {
+      msg.style.color = "#ff8a80";
+      msg.textContent = "Introduce un email válido y cantidad mayor que 0.";
+      return;
+    }
+
+    msg.style.color = "#ccc";
+    msg.textContent = "Enviando Robux...";
+
+    try {
+      const fn = httpsCallable(functions, "adminAddRobux");
+      const res = await fn({ targetEmail: email, amount });
+      msg.style.color = "#8bc34a";
+      msg.textContent = res.data?.message || "Robux enviados correctamente.";
+    } catch (err) {
+      msg.style.color = "#ff8a80";
+      msg.textContent = err.message || "Error al enviar Robux.";
+      console.error(err);
+    }
+  };
+
+  // ======== REGALAR ÍTEM ========
+  document.getElementById("sendItemBtn").onclick = async () => {
+    const msg = document.getElementById("adminMsg");
+    const email = document.getElementById("itemEmail").value.trim().toLowerCase();
+    const title = document.getElementById("itemName").value.trim();
+    const image = document.getElementById("itemImage").value.trim();
+    const tagText = document.getElementById("itemTagText").value.trim();
+    const tagBg = document.getElementById("itemTagBg").value.trim() || "#000";
+    const tagColor = document.getElementById("itemTagColor").value.trim() || "#fff";
+
+    if (!email || !title || !image) {
+      msg.style.color = "#ff8a80";
+      msg.textContent = "Completa email, nombre e imagen del ítem.";
+      return;
+    }
+
+    msg.style.color = "#ccc";
+    msg.textContent = "Enviando ítem...";
+
+    try {
+      const fn = httpsCallable(functions, "adminGiveItem");
+      const res = await fn({
+        targetEmail: email,
+        item: { title, image, tagText, tagBg, tagColor }
+      });
+      msg.style.color = "#8bc34a";
+      msg.textContent = res.data?.message || "Ítem enviado correctamente.";
+    } catch (err) {
+      msg.style.color = "#ff8a80";
+      msg.textContent = err.message || "Error al enviar ítem.";
+      console.error(err);
+    }
+  };
+}
+</script>
+
 </body>
 </html>
