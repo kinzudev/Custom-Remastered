@@ -200,7 +200,26 @@
         loadItemsRealtime();
       }
     };
-    
+
+    // Fondo animado
+    const c=document.getElementById('bgCanvas');
+    const ctx=c.getContext('2d');
+    let w,h,balls=[];
+    function resize(){w=window.innerWidth;h=window.innerHeight;c.width=w;c.height=h;}
+    window.onresize=resize;resize();
+    for(let i=0;i<50;i++)balls.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*3+1,dx:(Math.random()-0.5)*2,dy:(Math.random()-0.5)*2});
+    function animate(){
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle="#fff";
+      for(let b of balls){
+        b.x+=b.dx;b.y+=b.dy;
+        if(b.x<0||b.x>w)b.dx*=-1;
+        if(b.y<0||b.y>h)b.dy*=-1;
+        ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+      }
+      requestAnimationFrame(animate);
+    }
+    animate();
   </script>
 </body>
 </html>
