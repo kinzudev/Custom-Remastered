@@ -22,7 +22,6 @@
     .main{flex:1;padding:18px;background:#fafafa}
     .banner{height:120px;background-image:url('/mnt/data/59983a73-6d5c-45b0-9e3d-d39c2935bedf.png');background-size:cover;background-position:center;margin-bottom:12px;border-radius:4px}
 
-    .items{flex:1}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
     .card{background:#fff;border:1px solid #ddd;padding:10px;border-radius:6px;text-align:center;cursor:pointer;transition:transform 0.15s}
     .card:hover{transform:scale(1.04)}
@@ -30,6 +29,7 @@
     .card .title{font-size:14px;margin:4px 0;color:#333;font-weight:bold}
     .card .tag{font-size:12px;color:#666}
     .card .price{color:#0a8b00;font-weight:700;font-size:13px}
+    .delete-btn{background:#c00;color:#fff;border:none;padding:4px 8px;border-radius:4px;font-size:12px;cursor:pointer;margin-top:6px}
 
     .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center}
     .modal{background:#fff;padding:20px;border-radius:8px;max-width:420px;width:100%}
@@ -43,7 +43,7 @@
   </style>
 </head>
 <body>
-  <div class="topbar">Simulador de Catálogo
+  <div class="topbar">Custom V2 Test
     <div id="robuxDisplay"><img src="/mnt/data/ROBUX_2014_Logo.svg.png" alt="R$"> <span id="robuxAmount">0</span></div>
   </div>
 
@@ -56,7 +56,6 @@
 
     <main class="main">
       <div class="banner" aria-hidden="true"></div>
-
       <section class="items">
         <h3 id="sectionTitle">Catálogo</h3>
         <div id="controls"></div>
@@ -65,19 +64,17 @@
     </main>
   </div>
 
-  <!-- Auth modal -->
   <div id="authOverlay" class="overlay">
     <div class="modal">
       <h2 id="authTitle">Iniciar sesión / Registrarse</h2>
       <div class="form-row"><input id="email" type="email" placeholder="Correo electrónico"></div>
       <div class="form-row"><input id="password" type="password" placeholder="Contraseña"></div>
       <div style="display:flex;gap:8px"><button id="loginBtn">Iniciar sesión</button><button id="registerBtn">Registrarse</button></div>
-      <p class="muted">Solo el usuario <b>kinzudev@gmail.com</b> puede agregar ítems al catálogo.</p>
+      <p class="muted">Solo <b>kinzudev@gmail.com</b> puede agregar o eliminar ítems.</p>
     </div>
   </div>
 
   <script type="module">
-    // Firebase config (provided)
     const firebaseConfig = {
       apiKey: "AIzaSyBwj_as6pb5Bg81F9Cl9VWTKkekMM9Exfk",
       authDomain: "pekora-forum.firebaseapp.com",
@@ -90,15 +87,12 @@
 
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
-    import {
-      getFirestore, collection, addDoc, onSnapshot, doc, getDoc, updateDoc, setDoc, getDocs, query, orderBy
-    } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, getDoc, updateDoc, setDoc, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // UI refs
     const authOverlay = document.getElementById('authOverlay');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
@@ -115,116 +109,115 @@
     let viewingInventory = false;
     let itemsUnsub = null;
 
-    // Auth handlers
-    registerBtn.addEventListener('click', async()=>{
-      try{await createUserWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert('Error: '+e.message)}
-    });
-    loginBtn.addEventListener('click', async()=>{
-      try{await signInWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert('Error: '+e.message)}
-    });
-    logoutBtn.addEventListener('click', async()=>{await signOut(auth);});
+    registerBtn.onclick = async () => {
+      try { await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }
+      catch(e){ alert(e.message); }
+    };
+    loginBtn.onclick = async () => {
+      try { await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }
+      catch(e){ alert(e.message); }
+    };
+    logoutBtn.onclick = async () => await signOut(auth);
 
-    onAuthStateChanged(auth, async user=>{
+    onAuthStateChanged(auth, async user => {
       currentUser = user;
       if(user){
-        authOverlay.style.display = 'none';
+        authOverlay.style.display='none';
         await initApp();
       } else {
-        authOverlay.style.display = 'flex';
-        itemsGrid.innerHTML = '';
-        robuxAmount.textContent = '0';
-        controls.innerHTML = '';
-        sectionTitle.textContent = 'Catálogo';
-        if(itemsUnsub){itemsUnsub(); itemsUnsub = null}
+        authOverlay.style.display='flex';
+        itemsGrid.innerHTML='';
+        controls.innerHTML='';
+        robuxAmount.textContent='0';
+        if(itemsUnsub){itemsUnsub();itemsUnsub=null;}
       }
     });
 
     async function initApp(){
-      // Ensure user doc exists with robux balance
       const userRef = doc(db,'users',currentUser.uid);
       await setDoc(userRef,{email:currentUser.email,robux:1000},{merge:true});
-      // Listen to balance
-      onSnapshot(userRef,snap=>{if(snap.exists())robuxAmount.textContent = snap.data().robux ?? 0});
-
-      controls.innerHTML = '';
-      if(currentUser.email === 'kinzudev@gmail.com'){
-        const btn = document.createElement('button'); btn.textContent = 'Agregar ítem';
-        btn.onclick = adminAddItem; controls.appendChild(btn);
+      onSnapshot(userRef,snap=>{if(snap.exists())robuxAmount.textContent=snap.data().robux||0;});
+      controls.innerHTML='';
+      if(currentUser.email==='kinzudev@gmail.com'){
+        const btn=document.createElement('button');
+        btn.textContent='Agregar ítem';
+        btn.onclick=adminAddItem;
+        controls.appendChild(btn);
       }
-
-      // Default view: catálogo
-      viewingInventory = false;
-      sectionTitle.textContent = 'Catálogo';
       loadItemsRealtime();
     }
 
     function adminAddItem(){
-      const title = prompt('Nombre del ítem (aparecerá arriba del tag):');
-      if(!title) return;
-      const image = prompt('URL de la imagen:') || '';
-      const price = parseInt(prompt('Precio (R$):') || '0',10);
-      const rap = parseInt(prompt('RAP (valor estimado):') || '0',10);
-      addDoc(collection(db,'items'),{title,image,price,rap,created: Date.now()}).then(()=>alert('Ítem agregado')).catch(e=>alert('Error: '+e.message));
+      const title=prompt('Nombre del ítem:');
+      if(!title)return;
+      const image=prompt('URL de la imagen:')||'';
+      const price=parseInt(prompt('Precio (R$):')||'0');
+      const rap=parseInt(prompt('RAP:')||'0');
+      addDoc(collection(db,'items'),{title,image,price,rap,created:Date.now()});
     }
 
     function loadItemsRealtime(){
-      if(itemsUnsub) itemsUnsub();
-      const q = query(collection(db,'items'), orderBy('created','desc'));
-      itemsUnsub = onSnapshot(q, snap=>{
-        itemsGrid.innerHTML = '';
+      if(itemsUnsub)itemsUnsub();
+      const q=query(collection(db,'items'),orderBy('created','desc'));
+      itemsUnsub=onSnapshot(q,snap=>{
+        itemsGrid.innerHTML='';
         snap.forEach(s=>{
-          const d = s.data();
-          const card = document.createElement('div'); card.className='card';
-          card.innerHTML = `\n            <img src="${escapeHtml(d.image||'https://via.placeholder.com/150')}" alt="">\n            <div class="title">${escapeHtml(d.title||'Sin título')}</div>\n            <div class="tag">RAP: ${d.rap||0}</div>\n            <div class="price">R$${d.price||0}</div>`;
-          card.onclick = ()=>buyItem(s.id,d);
+          const d=s.data();
+          const card=document.createElement('div');
+          card.className='card';
+          card.innerHTML=`
+            <img src=\"${d.image||'https://via.placeholder.com/150'}\">
+            <div class=\"title\">${d.title||'Sin título'}</div>
+            <div class=\"tag\">RAP: ${d.rap||0}</div>
+            <div class=\"price\">R$${d.price||0}</div>`;
+          if(currentUser.email==='kinzudev@gmail.com'){
+            const del=document.createElement('button');
+            del.textContent='🗑️ Eliminar';
+            del.className='delete-btn';
+            del.onclick=async(ev)=>{ev.stopPropagation();if(confirm('¿Eliminar ítem?'))await deleteDoc(doc(db,'items',s.id));};
+            card.appendChild(del);
+          }
+          card.onclick=()=>buyItem(s.id,d);
           itemsGrid.appendChild(card);
         });
-      }, err=>{console.error(err); alert('Error cargando items: '+err.message)});
+      });
     }
 
     async function buyItem(id,data){
-      if(!currentUser) return alert('Inicia sesión para comprar');
-      try{
-        const userRef = doc(db,'users',currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        const balance = (userSnap.exists() && userSnap.data().robux) ? userSnap.data().robux : 0;
-        if(balance < (data.price||0)) return alert('No tienes Robux suficientes');
-        // deduct
-        await updateDoc(userRef,{robux: balance - (data.price||0)});
-        // add to inventory
-        await addDoc(collection(db,'users',currentUser.uid,'inventory'),{itemId:id,title:data.title,image:data.image,price:data.price,rap:data.rap,purchasedAt:Date.now()});
-        alert('Compra exitosa');
-      }catch(e){console.error(e);alert('Error al comprar: '+e.message)}
+      if(currentUser.email==='kinzudev@gmail.com')return; // admin no compra
+      const userRef=doc(db,'users',currentUser.uid);
+      const snap=await getDoc(userRef);
+      const bal=snap.data().robux||0;
+      if(bal<(data.price||0))return alert('No tienes Robux suficientes');
+      await updateDoc(userRef,{robux:bal-(data.price||0)});
+      await addDoc(collection(db,'users',currentUser.uid,'inventory'),{...data,itemId:id,purchasedAt:Date.now()});
+      alert('Compra realizada');
     }
 
-    inventoryLink.addEventListener('click', async (e)=>{
+    inventoryLink.onclick=async(e)=>{
       e.preventDefault();
-      if(!currentUser) return alert('Inicia sesión');
-      viewingInventory = !viewingInventory;
+      viewingInventory=!viewingInventory;
       if(viewingInventory){
-        sectionTitle.textContent = 'Inventario';
-        if(itemsUnsub){itemsUnsub(); itemsUnsub = null}
-        await showInventory();
-      } else {
-        sectionTitle.textContent = 'Catálogo';
-        loadItemsRealtime();
-      }
-    });
-
-    async function showInventory(){
-      itemsGrid.innerHTML = '';
-      try{
-        const invSnap = await getDocs(collection(db,'users',currentUser.uid,'inventory'));
-        invSnap.forEach(s=>{
-          const d = s.data();
-          const card = document.createElement('div'); card.className='card';
-          card.innerHTML = `\n            <img src="${escapeHtml(d.image||'https://via.placeholder.com/150')}" alt="">\n            <div class="title">${escapeHtml(d.title||'Sin título')}</div>\n            <div class="tag">RAP: ${d.rap||0}</div>\n            <div class="price">R$${d.price||0}</div>`;
+        sectionTitle.textContent='Inventario';
+        if(itemsUnsub){itemsUnsub();itemsUnsub=null;}
+        const inv=await getDocs(collection(db,'users',currentUser.uid,'inventory'));
+        itemsGrid.innerHTML='';
+        inv.forEach(s=>{
+          const d=s.data();
+          const card=document.createElement('div');
+          card.className='card';
+          card.innerHTML=`
+            <img src=\"${d.image||'https://via.placeholder.com/150'}\">
+            <div class=\"title\">${d.title}</div>
+            <div class=\"tag\">RAP: ${d.rap}</div>
+            <div class=\"price\">R$${d.price}</div>`;
           itemsGrid.appendChild(card);
         });
-      }catch(e){console.error(e);alert('Error cargando inventario: '+e.message)}
-    }
-
-    function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]})}
+      } else {
+        sectionTitle.textContent='Catálogo';
+        loadItemsRealtime();
+      }
+    };
   </script>
 </body>
 </html>
