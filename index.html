@@ -3,49 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Simulador Roblox - Catalog</title>
-  <style>
-    *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-    body{margin:0;background:#222;color:#222}
-    a{color:inherit;text-decoration:none}
-
-    .topbar{background:#f60;color:#fff;padding:10px 18px;text-align:center;font-weight:700;position:relative}
-    #robuxDisplay{position:absolute;top:6px;right:20px;display:flex;align-items:center;gap:6px;font-weight:bold;color:#00aa00}
-    #robuxDisplay img{width:26px;height:26px}
-
-    .app{display:flex;min-height:calc(100vh - 40px)}
-    .sidebar{width:220px;background:#2f2f2f;color:#ddd;padding:18px}
-    .sidebar h2{color:#fff;font-size:16px;margin:6px 0}
-    .sidebar a{display:block;color:#bfbfbf;padding:8px 4px}
-    .upgrade{display:inline-block;background:#08f;color:#fff;padding:8px 10px;border-radius:4px;margin-top:12px}
-
-    .main{flex:1;padding:18px;background:#fafafa}
-    .banner{height:120px;background-image:url('/mnt/data/59983a73-6d5c-45b0-9e3d-d39c2935bedf.png');background-size:cover;background-position:center;margin-bottom:12px;border-radius:4px}
-
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
-    .card{background:#fff;border:1px solid #ddd;padding:10px;border-radius:6px;text-align:center;transition:transform 0.15s}
-    .card:hover{transform:scale(1.04)}
-    .card img{width:100%;height:120px;object-fit:contain;border-bottom:1px solid #ddd;margin-bottom:6px}
-    .card .title{font-size:14px;margin:4px 0;color:#333;font-weight:bold}
-    .card .tag{font-size:12px;color:#666}
-    .card .price{color:#0a8b00;font-weight:700;font-size:13px;margin-bottom:6px}
-    .buy-btn{background:#00b300;color:#fff;border:none;padding:6px 10px;border-radius:4px;font-size:13px;cursor:pointer}
-    .delete-btn{background:#c00;color:#fff;border:none;padding:4px 8px;border-radius:4px;font-size:12px;cursor:pointer;margin-top:6px}
-
-    .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center}
-    .modal{background:#fff;padding:20px;border-radius:8px;max-width:420px;width:100%}
-    .modal h2{margin-top:0}
-    .form-row{margin-bottom:10px}
-    input[type=text],input[type=password],input[type=email]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
-    button{padding:8px 12px;border:0;border-radius:6px;background:#0666ff;color:#fff;cursor:pointer}
-    .muted{color:#666;font-size:13px}
-
-    @media (max-width:800px){.sidebar{display:none}.banner{height:90px}}
-  </style>
+  <title>Simulador Roblox - Catálogo</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <canvas id="bgCanvas"></canvas>
+
   <div class="topbar">Simulador de Catálogo
-    <div id="robuxDisplay"><img src="/mnt/data/ROBUX_2014_Logo.svg.png" alt="R$"> <span id="robuxAmount">0</span></div>
+    <div id="robuxDisplay"><img src="ROBUX_2014_Logo.svg.png" alt="R$"> <span id="robuxAmount">0</span></div>
   </div>
 
   <div class="app">
@@ -56,7 +21,7 @@
     </aside>
 
     <main class="main">
-      <div class="banner" aria-hidden="true"></div>
+      <div class="banner"></div>
       <section class="items">
         <h3 id="sectionTitle">Catálogo</h3>
         <div id="controls"></div>
@@ -94,7 +59,6 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const authOverlay = document.getElementById('authOverlay');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const loginBtn = document.getElementById('loginBtn');
@@ -105,6 +69,7 @@
     const inventoryLink = document.getElementById('inventoryLink');
     const controls = document.getElementById('controls');
     const sectionTitle = document.getElementById('sectionTitle');
+    const authOverlay = document.getElementById('authOverlay');
 
     let currentUser = null;
     let viewingInventory = false;
@@ -127,10 +92,8 @@
         await initApp();
       } else {
         authOverlay.style.display='flex';
-        itemsGrid.innerHTML='';
-        controls.innerHTML='';
-        robuxAmount.textContent='0';
         if(itemsUnsub){itemsUnsub();itemsUnsub=null;}
+        itemsGrid.innerHTML='';
       }
     });
 
@@ -154,7 +117,8 @@
       const image=prompt('URL de la imagen:')||'';
       const price=parseInt(prompt('Precio (R$):')||'0');
       const rap=parseInt(prompt('RAP:')||'0');
-      addDoc(collection(db,'items'),{title,image,price,rap,created:Date.now()});
+      const stock=parseInt(prompt('Stock disponible:')||'0');
+      addDoc(collection(db,'items'),{title,image,price,rap,stock,created:Date.now()});
     }
 
     function loadItemsRealtime(){
@@ -170,21 +134,22 @@
             <img src="${d.image||'https://via.placeholder.com/150'}">
             <div class="title">${d.title||'Sin título'}</div>
             <div class="tag">RAP: ${d.rap||0}</div>
-            <div class="price">R$${d.price||0}</div>`;
+            <div class="price">R$${d.price||0}</div>
+            <div class="stock">Stock: ${d.stock||0}</div>
+          `;
 
-          // Solo admin puede eliminar
           if(currentUser.email==='kinzudev@gmail.com'){
             const del=document.createElement('button');
             del.textContent='🗑️ Eliminar';
             del.className='delete-btn';
-            del.onclick=async(ev)=>{ev.stopPropagation();if(confirm('¿Eliminar ítem?'))await deleteDoc(doc(db,'items',s.id));};
+            del.onclick=async()=>{if(confirm('¿Eliminar ítem?'))await deleteDoc(doc(db,'items',s.id));};
             card.appendChild(del);
           } else {
-            // Otros usuarios: botón de compra
             const buy=document.createElement('button');
-            buy.textContent='Comprar';
+            buy.textContent=d.stock>0?'Comprar':'Sin stock';
             buy.className='buy-btn';
-            buy.onclick=(ev)=>{ev.stopPropagation();buyItem(s.id,d);};
+            buy.disabled=d.stock<=0;
+            buy.onclick=()=>buyItem(s.id,d);
             card.appendChild(buy);
           }
 
@@ -195,13 +160,20 @@
 
     async function buyItem(id,data){
       if(currentUser.email==='kinzudev@gmail.com')return alert("El administrador no puede comprar ítems.");
+      const itemRef=doc(db,'items',id);
+      const itemSnap=await getDoc(itemRef);
+      const item=itemSnap.data();
+      if(item.stock<=0)return alert("No hay stock disponible.");
+
       const userRef=doc(db,'users',currentUser.uid);
-      const snap=await getDoc(userRef);
-      const bal=snap.data().robux||0;
-      if(bal<(data.price||0))return alert('No tienes Robux suficientes');
-      await updateDoc(userRef,{robux:bal-(data.price||0)});
-      await addDoc(collection(db,'users',currentUser.uid,'inventory'),{...data,itemId:id,purchasedAt:Date.now()});
-      alert('Compra realizada con éxito ✅');
+      const userSnap=await getDoc(userRef);
+      const bal=userSnap.data().robux||0;
+      if(bal<(item.price||0))return alert('No tienes Robux suficientes.');
+
+      await updateDoc(userRef,{robux:bal-item.price});
+      await updateDoc(itemRef,{stock:item.stock-1});
+      await addDoc(collection(db,'users',currentUser.uid,'inventory'),{...item,itemId:id,purchasedAt:Date.now()});
+      alert('Compra realizada ✅');
     }
 
     inventoryLink.onclick=async(e)=>{
@@ -228,6 +200,26 @@
         loadItemsRealtime();
       }
     };
+
+    // Fondo animado
+    const c=document.getElementById('bgCanvas');
+    const ctx=c.getContext('2d');
+    let w,h,balls=[];
+    function resize(){w=window.innerWidth;h=window.innerHeight;c.width=w;c.height=h;}
+    window.onresize=resize;resize();
+    for(let i=0;i<50;i++)balls.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*3+1,dx:(Math.random()-0.5)*2,dy:(Math.random()-0.5)*2});
+    function animate(){
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle="#fff";
+      for(let b of balls){
+        b.x+=b.dx;b.y+=b.dy;
+        if(b.x<0||b.x>w)b.dx*=-1;
+        if(b.y<0||b.y>h)b.dy*=-1;
+        ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+      }
+      requestAnimationFrame(animate);
+    }
+    animate();
   </script>
 </body>
 </html>
