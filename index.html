@@ -426,32 +426,52 @@ document.body.style.overflowY = "scroll";
 </script>
 
 <script>
-  // 🛒 Desactivar botón de compra cuando no hay stock
-  const observer = new MutationObserver(() => {
+  // 🛒 Función para actualizar botones según el stock
+  function actualizarBotonesStock() {
     document.querySelectorAll('.card').forEach(card => {
-      const stockElement = card.querySelector('.stock');
+      const stockEl = card.querySelector('.stock');
       const buyBtn = card.querySelector('.buy-btn');
-      if (stockElement && buyBtn) {
-        const stockText = stockElement.textContent.toLowerCase();
-        const isOutOfStock = stockText.includes('sin stock') || stockText.includes('0');
-        if (isOutOfStock) {
+      if (stockEl && buyBtn) {
+        const texto = stockEl.textContent.toLowerCase();
+        const sinStock = texto.includes('sin stock') || /\b0\b/.test(texto);
+        if (sinStock) {
           buyBtn.disabled = true;
-          buyBtn.classList.add('disabled');
           buyBtn.textContent = 'Sin stock';
+          buyBtn.classList.add('disabled');
         } else {
           buyBtn.disabled = false;
-          buyBtn.classList.remove('disabled');
           buyBtn.textContent = 'Comprar';
+          buyBtn.classList.remove('disabled');
         }
       }
     });
-  });
+  }
 
-  // Detectar cuando se actualizan los ítems en la página
+  // Actualiza una vez al cargar
+  actualizarBotonesStock();
+
+  // 🕒 Observa solo los nuevos elementos añadidos al grid
   const grid = document.getElementById('itemsGrid');
   if (grid) {
-    observer.observe(grid, { childList: true, subtree: true });
+    const observer = new MutationObserver(mutations => {
+      let added = false;
+      mutations.forEach(m => {
+        if (m.addedNodes.length > 0) added = true;
+      });
+      if (added) {
+        // Espera un pequeño tiempo para evitar loops
+        setTimeout(actualizarBotonesStock, 100);
+      }
+    });
+    observer.observe(grid, { childList: true });
   }
+
+  // También actualiza cuando se hace una compra manual
+  document.addEventListener('click', e => {
+    if (e.target.classList.contains('buy-btn')) {
+      setTimeout(actualizarBotonesStock, 200);
+    }
+  });
 </script>
 
 </body>
