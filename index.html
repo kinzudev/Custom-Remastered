@@ -285,35 +285,50 @@
   </script>
 
 <script type="module">
-import { 
-  collection, addDoc, getDoc, getDocs, doc, setDoc, updateDoc, deleteDoc 
-} from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
-import { db, auth } from './main.js';
+import {
+  collection, addDoc, getDoc, getDocs, doc, setDoc, updateDoc
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { db, auth } from "./main.js";
 
-// Esperar a que el DOM cargue completamente antes de insertar el botón
-window.addEventListener('DOMContentLoaded', () => {
-  const observer = new MutationObserver(() => {
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar && !sidebar.querySelector('.redeem-link')) {
-      const redeemLink = document.createElement('a');
-      redeemLink.href = "#";
-      redeemLink.textContent = "Canjear código";
-      redeemLink.classList.add('redeem-link');
-      sidebar.appendChild(redeemLink);
+// === FUNCIÓN PARA ASEGURAR QUE EL BOTÓN APAREZCA ===
+function waitForSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  if (sidebar && !sidebar.querySelector(".redeem-link")) {
+    // Crear el botón solo si aún no existe
+    const redeemLink = document.createElement("a");
+    redeemLink.href = "#";
+    redeemLink.textContent = "🎁 Canjear código";
+    redeemLink.classList.add("redeem-link");
 
-      redeemLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        openRedeemSection();
-      });
-      observer.disconnect(); // deja de observar cuando se añadió
+    // Insertarlo al final del sidebar
+    sidebar.appendChild(redeemLink);
+
+    // Evento para abrir la sección
+    redeemLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      openRedeemSection();
+    });
+
+    console.log("✅ Botón 'Canjear código' añadido al sidebar");
+  } else {
+    // Si no existe todavía, reintenta en 500 ms
+    setTimeout(waitForSidebar, 500);
+  }
+}
+
+// Ejecutar una vez que el DOM esté listo y el usuario autenticado
+window.addEventListener("DOMContentLoaded", () => {
+  const checkAuth = setInterval(() => {
+    if (auth && auth.currentUser !== undefined) {
+      waitForSidebar();
+      clearInterval(checkAuth);
     }
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
+  }, 800);
 });
 
-// === MOSTRAR SECCIÓN DE CANJE ===
+// === SECCIÓN DE CANJE ===
 async function openRedeemSection() {
-  const main = document.querySelector('.main');
+  const main = document.querySelector(".main");
   main.innerHTML = `
     <section class="redeem-section">
       <h3>🎁 Canjear código</h3>
@@ -327,12 +342,11 @@ async function openRedeemSection() {
     </section>
   `;
 
-  document.getElementById('redeemBtn').onclick = redeemCode;
+  document.getElementById("redeemBtn").onclick = redeemCode;
 
-  // Si es admin, mostrar controles de creación y listado
-  if (auth.currentUser?.email === 'kinzudev@gmail.com') {
-    const adminDiv = document.getElementById('adminControls');
-    const btn = document.createElement('button');
+  if (auth.currentUser?.email === "kinzudev@gmail.com") {
+    const adminDiv = document.getElementById("adminControls");
+    const btn = document.createElement("button");
     btn.textContent = "➕ Crear código nuevo";
     btn.onclick = createCodePrompt;
     adminDiv.appendChild(btn);
@@ -347,10 +361,10 @@ async function createCodePrompt() {
   const type = prompt("Tipo de recompensa: 'robux' o 'item'").toLowerCase();
   let data = { code, active: true, type };
 
-  if (type === 'robux') {
+  if (type === "robux") {
     const amount = parseInt(prompt("Cantidad de Robux que otorga:"));
     data.value = amount || 0;
-  } else if (type === 'item') {
+  } else if (type === "item") {
     const title = prompt("Nombre del ítem:");
     const image = prompt("URL de la imagen:");
     const rap = parseInt(prompt("RAP del ítem:") || "0");
@@ -370,15 +384,15 @@ async function createCodePrompt() {
 
 // === CANJEAR CÓDIGO ===
 async function redeemCode() {
-  const code = document.getElementById('codeInput').value.trim().toUpperCase();
-  const msg = document.getElementById('redeemMsg');
-  msg.textContent = '';
+  const code = document.getElementById("codeInput").value.trim().toUpperCase();
+  const msg = document.getElementById("redeemMsg");
+  msg.textContent = "";
 
   if (!code) return alert("Introduce un código válido.");
 
   const codesSnap = await getDocs(collection(db, "codes"));
   let found = null;
-  codesSnap.forEach(c => {
+  codesSnap.forEach((c) => {
     if (c.data().code.toUpperCase() === code) found = { id: c.id, ...c.data() };
   });
 
@@ -414,7 +428,7 @@ async function redeemCode() {
     await addDoc(collection(db, `users/${auth.currentUser.uid}/inventory`), {
       ...found.itemData,
       fromCode: code,
-      receivedAt: Date.now()
+      receivedAt: Date.now(),
     });
     await setDoc(usedRef, { usedAt: Date.now() });
     msg.textContent = `🎁 ¡Has recibido el ítem "${found.itemData.title}"!`;
@@ -424,22 +438,24 @@ async function redeemCode() {
 
 // === LISTADO DE CÓDIGOS (ADMIN) ===
 async function loadCodesList() {
-  const list = document.getElementById('codesList');
+  const list = document.getElementById("codesList");
   list.innerHTML = `<h4>📜 Códigos activos</h4>`;
   const snap = await getDocs(collection(db, "codes"));
-  snap.forEach(c => {
+  snap.forEach((c) => {
     const data = c.data();
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     div.className = "code-item";
     div.innerHTML = `
-      <strong>${data.code}</strong> — ${data.type === 'robux' ? `${data.value} Robux` : data.itemData?.title || 'Ítem'}
+      <strong>${data.code}</strong> — ${
+      data.type === "robux" ? `${data.value} Robux` : data.itemData?.title || "Ítem"
+    }
       ${data.active ? "<span style='color:lime'>[Activo]</span>" : "<span style='color:red'>[Expirado]</span>"}
       <button class="delete-code" data-id="${c.id}">🗑️</button>
     `;
     list.appendChild(div);
   });
 
-  document.querySelectorAll('.delete-code').forEach(btn => {
+  document.querySelectorAll(".delete-code").forEach((btn) => {
     btn.onclick = async () => {
       const id = btn.dataset.id;
       if (confirm("¿Seguro que quieres eliminar este código?")) {
