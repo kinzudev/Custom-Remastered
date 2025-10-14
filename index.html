@@ -283,5 +283,120 @@
     }
     animate();
   </script>
+
+<script type="module">
+import { collection, addDoc, getDoc, getDocs, doc, setDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
+import { db, auth } from './main.js'; // si tu archivo principal se llama diferente, ajusta este import
+
+// === CANJE DE CÓDIGOS ===
+const sidebar = document.querySelector('.sidebar');
+const redeemLink = document.createElement('a');
+redeemLink.href = "#";
+redeemLink.textContent = "Canjear código";
+sidebar.insertBefore(redeemLink, sidebar.lastElementChild);
+
+const main = document.querySelector('.main');
+
+redeemLink.onclick = (e) => {
+  e.preventDefault();
+  main.innerHTML = `
+    <section class="redeem-section">
+      <h3>Canjear código</h3>
+      <div class="form-row">
+        <input id="codeInput" placeholder="Introduce tu código">
+        <button id="redeemBtn">Canjear</button>
+      </div>
+      <div id="redeemMsg"></div>
+      <div id="adminControls"></div>
+    </section>
+  `;
+
+  if (auth.currentUser?.email === 'kinzudev@gmail.com') {
+    const adminDiv = document.getElementById('adminControls');
+    const btn = document.createElement('button');
+    btn.textContent = "Crear código nuevo";
+    btn.onclick = createCodePrompt;
+    adminDiv.appendChild(btn);
+  }
+
+  document.getElementById('redeemBtn').onclick = redeemCode;
+};
+
+// === CREAR CÓDIGO (ADMIN) ===
+async function createCodePrompt() {
+  const code = prompt("Nombre del código (ej: HALLOWEEN2025):");
+  if (!code) return;
+  const type = prompt("Tipo de recompensa: 'robux' o 'item'").toLowerCase();
+  let data = { code, active: true, type };
+
+  if (type === 'robux') {
+    const amount = parseInt(prompt("Cantidad de Robux que otorga:"));
+    data.value = amount || 0;
+  } else if (type === 'item') {
+    const title = prompt("Nombre del ítem:");
+    const image = prompt("URL de la imagen:");
+    const rap = parseInt(prompt("RAP del ítem:") || "0");
+    const price = parseInt(prompt("Precio simbólico (solo visual):") || "0");
+    const tagText = prompt("Texto del tag (opcional):") || "";
+    const tagBg = tagText ? prompt("Color de fondo del tag:") || "#ff0000" : "";
+    const tagColor = tagText ? prompt("Color del texto del tag:") || "#ffffff" : "";
+    data.itemData = { title, image, rap, price, tagText, tagBg, tagColor };
+  } else {
+    return alert("Tipo inválido.");
+  }
+
+  await addDoc(collection(db, "codes"), data);
+  alert("✅ Código creado correctamente.");
+}
+
+// === CANJEAR CÓDIGO ===
+async function redeemCode() {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const msg = document.getElementById('redeemMsg');
+  msg.textContent = '';
+
+  if (!code) return alert("Introduce un código válido.");
+
+  const codesSnap = await getDocs(collection(db, "codes"));
+  let found = null;
+  codesSnap.forEach(c => {
+    if (c.data().code.toUpperCase() === code) found = { id: c.id, ...c.data() };
+  });
+
+  if (!found || !found.active) {
+    msg.textContent = "❌ Código no válido o inactivo.";
+    msg.style.color = "red";
+    return;
+  }
+
+  const userRef = doc(db, "users", auth.currentUser.uid);
+  const usedRef = doc(db, `users/${auth.currentUser.uid}/usedCodes`, found.id);
+  const usedSnap = await getDoc(usedRef);
+  if (usedSnap.exists()) {
+    msg.textContent = "⚠️ Ya usaste este código.";
+    msg.style.color = "orange";
+    return;
+  }
+
+  if (found.type === "robux") {
+    const userSnap = await getDoc(userRef);
+    const robux = userSnap.data().robux || 0;
+    await updateDoc(userRef, { robux: robux + (found.value || 0) });
+    await setDoc(usedRef, { usedAt: Date.now() });
+    msg.textContent = `✅ ¡Recibiste ${found.value} Robux!`;
+    msg.style.color = "limegreen";
+  } else if (found.type === "item" && found.itemData) {
+    await addDoc(collection(db, `users/${auth.currentUser.uid}/inventory`), {
+      ...found.itemData,
+      fromCode: code,
+      receivedAt: Date.now()
+    });
+    await setDoc(usedRef, { usedAt: Date.now() });
+    msg.textContent = `🎁 ¡Has recibido el ítem "${found.itemData.title}"!`;
+    msg.style.color = "limegreen";
+  }
+}
+</script>
+
 </body>
 </html>
