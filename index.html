@@ -288,109 +288,187 @@
 // Asegura desplazamiento suave en toda la página
 document.documentElement.style.scrollBehavior = "smooth";
 
+// Siempre permitir el scroll en el cuerpo
+document.body.style.overflowY = "scroll";
+</script>
+
 <script>
-// === PANEL ADMIN KINZUDEV ===
-
-let currentUser = null;
-
-// Esperar a que Firebase cargue
-firebase.auth().onAuthStateChanged((user) => {
-  currentUser = user;
-  console.log("Usuario actual:", user ? user.email : "Ninguno");
+onAuthStateChanged(auth, user => {
+  if (user && user.email === "kinzudev@gmail.com") {
+    createAdminButton();
+  }
 });
 
-window.addEventListener("keydown", (e) => {
-  if (e.key !== "Insert") return;
+function createAdminButton() {
+  if (document.getElementById("adminBtn")) return;
 
-  if (!currentUser) {
-    alert("Debes iniciar sesión primero.");
-    return;
-  }
-  if (currentUser.email !== "kinzudev@gmail.com") {
-    console.log("No tienes permisos.");
-    return;
-  }
+  const btn = document.createElement("button");
+  btn.id = "adminBtn";
+  btn.textContent = "🛠 Admin Panel";
+  btn.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #00bcd4, #007acc);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 20px;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 9999;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    transition: all 0.3s;
+  `;
+  btn.onmouseover = () => (btn.style.transform = "scale(1.1)");
+  btn.onmouseout = () => (btn.style.transform = "scale(1)");
+  btn.onclick = openAdminPanel;
 
+  document.body.appendChild(btn);
+}
+
+function openAdminPanel() {
   const existing = document.getElementById("adminPanel");
-  if (existing) { existing.remove(); return; }
+  if (existing) {
+    existing.remove();
+    return;
+  }
 
-  createAdminPanel();
-});
-
-async function createAdminPanel() {
   const panel = document.createElement("div");
   panel.id = "adminPanel";
   panel.style.cssText = `
-    position:fixed;right:20px;top:100px;width:420px;
-    background:#111;color:white;padding:16px;border-radius:12px;
-    box-shadow:0 0 20px rgba(0,0,0,0.4);z-index:99999;
-    font-family:sans-serif;
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 400px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 16px;
+    color: white;
+    font-family: Arial, sans-serif;
+    z-index: 10000;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
   `;
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <h3 style="margin:0;">Panel Admin</h3>
-      <button id="closePanel" style="background:#222;border:none;color:white;border-radius:8px;padding:4px 8px;cursor:pointer;">✕</button>
+      <button id="closeAdmin" style="background:#222;color:white;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;">✕</button>
     </div>
-    <hr style="border-color:#333;margin:10px 0;">
-    <select id="panelMode" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <option value="robux">Añadir Robux</option>
+
+    <select id="adminMode" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:12px;">
+      <option value="robux">Regalar Robux</option>
       <option value="item">Regalar Ítem</option>
     </select>
 
-    <div id="robuxSection">
-      <input id="robuxEmail" placeholder="Email del usuario" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="robuxAmount" type="number" placeholder="Cantidad de Robux" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <button id="sendRobux" style="background:#0a84ff;border:none;color:white;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%;">Enviar Robux</button>
+    <!-- ROBUX -->
+    <div id="robuxForm">
+      <input id="robuxEmail" type="email" placeholder="Email del usuario" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="robuxAmount" type="number" placeholder="Cantidad de Robux" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <button id="giveRobuxBtn" style="width:100%;padding:10px;border:none;border-radius:8px;background:#00bcd4;color:white;font-weight:bold;cursor:pointer;">Regalar Robux</button>
     </div>
 
-    <div id="itemSection" style="display:none;">
-      <input id="itemEmail" placeholder="Email del usuario" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="itemName" placeholder="Nombre del ítem" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="itemImage" placeholder="URL de imagen" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="itemTag" placeholder="Texto del tag" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="itemTagBg" placeholder="Color fondo tag (#000)" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <input id="itemTagColor" placeholder="Color texto tag (#fff)" style="width:100%;padding:8px;border-radius:8px;background:#222;color:white;margin-bottom:10px;">
-      <button id="sendItem" style="background:#00c853;border:none;color:white;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%;">Enviar Ítem</button>
+    <!-- ITEM -->
+    <div id="itemForm" style="display:none;">
+      <input id="itemEmail" type="email" placeholder="Email del usuario" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="itemName" type="text" placeholder="Nombre del ítem" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="itemImage" type="text" placeholder="URL de la imagen" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="itemTag" type="text" placeholder="Texto del tag (opcional)" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="tagBg" type="text" placeholder="Color de fondo del tag (ej: #ff0000)" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <input id="tagColor" type="text" placeholder="Color del texto del tag (ej: #fff)" style="width:100%;padding:8px;margin-bottom:8px;border:none;border-radius:8px;background:#222;color:white;">
+      <button id="giveItemBtn" style="width:100%;padding:10px;border:none;border-radius:8px;background:#00c853;color:white;font-weight:bold;cursor:pointer;">Regalar Ítem</button>
     </div>
 
-    <p id="adminMsg" style="font-size:13px;color:#ccc;margin-top:8px;"></p>
+    <p id="adminMsg" style="font-size:13px;color:#bbb;margin-top:8px;"></p>
   `;
-
   document.body.appendChild(panel);
 
-  document.getElementById("closePanel").onclick = () => panel.remove();
-
-  const panelMode = document.getElementById("panelMode");
-  const robuxSection = document.getElementById("robuxSection");
-  const itemSection = document.getElementById("itemSection");
-  panelMode.onchange = () => {
-    robuxSection.style.display = panelMode.value === "robux" ? "block" : "none";
-    itemSection.style.display = panelMode.value === "item" ? "block" : "none";
+  document.getElementById("closeAdmin").onclick = () => panel.remove();
+  document.getElementById("adminMode").onchange = (e) => {
+    document.getElementById("robuxForm").style.display = e.target.value === "robux" ? "block" : "none";
+    document.getElementById("itemForm").style.display = e.target.value === "item" ? "block" : "none";
   };
 
-  const msg = document.getElementById("adminMsg");
-
-  document.getElementById("sendRobux").onclick = async () => {
+  document.getElementById("giveRobuxBtn").onclick = async () => {
     const email = document.getElementById("robuxEmail").value.trim();
-    const amount = Number(document.getElementById("robuxAmount").value || 0);
-    if (!email || amount <= 0) return msg.textContent = "Completa todos los campos.";
+    const amount = parseInt(document.getElementById("robuxAmount").value);
+    const msg = document.getElementById("adminMsg");
 
-    msg.textContent = `Se añadirán ${amount} Robux a ${email}`;
-    msg.style.color = "#0f0";
+    if (!email || !amount) {
+      msg.textContent = "Completa todos los campos.";
+      msg.style.color = "#ff8a80";
+      return;
+    }
+
+    try {
+      const q = query(collection(db, "users"));
+      const usersSnap = await getDocs(q);
+      let foundUser = null;
+      usersSnap.forEach((u) => { if (u.data().email === email) foundUser = u; });
+
+      if (!foundUser) {
+        msg.textContent = "Usuario no encontrado.";
+        msg.style.color = "#ff8a80";
+        return;
+      }
+
+      await updateDoc(doc(db, "users", foundUser.id), {
+        robux: (foundUser.data().robux || 0) + amount
+      });
+
+      msg.textContent = `Se añadieron ${amount} Robux a ${email}`;
+      msg.style.color = "#8bc34a";
+    } catch (e) {
+      msg.textContent = "Error: " + e.message;
+      msg.style.color = "#ff8a80";
+    }
   };
 
-  document.getElementById("sendItem").onclick = async () => {
+  document.getElementById("giveItemBtn").onclick = async () => {
     const email = document.getElementById("itemEmail").value.trim();
-    const title = document.getElementById("itemName").value.trim();
+    const name = document.getElementById("itemName").value.trim();
     const image = document.getElementById("itemImage").value.trim();
     const tag = document.getElementById("itemTag").value.trim();
-    const bg = document.getElementById("itemTagBg").value.trim() || "#000";
-    const color = document.getElementById("itemTagColor").value.trim() || "#fff";
-    if (!email || !title || !image) return msg.textContent = "Completa todos los campos obligatorios.";
+    const tagBg = document.getElementById("tagBg").value.trim() || "#000";
+    const tagColor = document.getElementById("tagColor").value.trim() || "#fff";
+    const msg = document.getElementById("adminMsg");
 
-    msg.textContent = `Se regalará "${title}" a ${email}`;
-    msg.style.color = "#0f0";
+    if (!email || !name || !image) {
+      msg.textContent = "Completa todos los campos obligatorios.";
+      msg.style.color = "#ff8a80";
+      return;
+    }
+
+    try {
+      const q = query(collection(db, "users"));
+      const usersSnap = await getDocs(q);
+      let foundUser = null;
+      usersSnap.forEach((u) => { if (u.data().email === email) foundUser = u; });
+
+      if (!foundUser) {
+        msg.textContent = "Usuario no encontrado.";
+        msg.style.color = "#ff8a80";
+        return;
+      }
+
+      await addDoc(collection(db, "users", foundUser.id, "inventory"), {
+        title: name,
+        image,
+        tagText: tag,
+        tagBg,
+        tagColor,
+        giftedBy: "Admin",
+        giftedAt: Date.now()
+      });
+
+      msg.textContent = `Ítem "${name}" regalado a ${email}`;
+      msg.style.color = "#8bc34a";
+    } catch (e) {
+      msg.textContent = "Error: " + e.message;
+      msg.style.color = "#ff8a80";
+    }
   };
 }
 </script>
