@@ -425,5 +425,34 @@ document.body.style.overflowY = "scroll";
   document.addEventListener("contextmenu", (e) => e.preventDefault());
 </script>
 
+<script>
+  // 🛒 Desactivar botón de compra cuando no hay stock
+  const observer = new MutationObserver(() => {
+    document.querySelectorAll('.card').forEach(card => {
+      const stockElement = card.querySelector('.stock');
+      const buyBtn = card.querySelector('.buy-btn');
+      if (stockElement && buyBtn) {
+        const stockText = stockElement.textContent.toLowerCase();
+        const isOutOfStock = stockText.includes('sin stock') || stockText.includes('0');
+        if (isOutOfStock) {
+          buyBtn.disabled = true;
+          buyBtn.classList.add('disabled');
+          buyBtn.textContent = 'Sin stock';
+        } else {
+          buyBtn.disabled = false;
+          buyBtn.classList.remove('disabled');
+          buyBtn.textContent = 'Comprar';
+        }
+      }
+    });
+  });
+
+  // Detectar cuando se actualizan los ítems en la página
+  const grid = document.getElementById('itemsGrid');
+  if (grid) {
+    observer.observe(grid, { childList: true, subtree: true });
+  }
+</script>
+
 </body>
 </html>
