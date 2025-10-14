@@ -285,11 +285,11 @@
   </script>
 
 <script>
-// === Scroll suave en toda la página ===
+// Asegura desplazamiento suave en toda la página
 document.documentElement.style.scrollBehavior = "smooth";
 
-// Detectar desplazamiento del mouse (funciona por defecto en navegadores modernos)
-// No se necesita código adicional para el wheel del mouse, solo estilos y comportamiento smooth.
+// Siempre permitir el scroll en el cuerpo
+document.body.style.overflowY = "scroll";
 </script>
 
 </body>
