@@ -288,16 +288,20 @@
 // Asegura desplazamiento suave en toda la página
 document.documentElement.style.scrollBehavior = "smooth";
 
-// Siempre permitir el scroll en el cuerpo
-document.body.style.overflowY = "scroll";
-</script>
-
 <script type="module">
+/*
+  Panel admin (Insert) — destinatarios cargados desde Firestore (colección `users`).
+  Requisitos: Firebase app inicializado, Firestore con docs en 'users/{uid}' que contengan campo 'email'.
+  Usa las Cloud Functions 'adminAddRobux' y 'adminGiveItem' como callable.
+*/
+
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-functions.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 const auth = getAuth();
 const functions = getFunctions();
+const db = getFirestore();
 
 let currentUser = null;
 onAuthStateChanged(auth, (u) => currentUser = u);
@@ -308,23 +312,37 @@ window.addEventListener('keydown', async (e) => {
 
   const existing = document.getElementById("adminPanel");
   if (existing) { existing.remove(); return; }
-  createAdminPanel();
+  await createAdminPanel(); // espera a que cargue la lista de users
 });
 
-function createAdminPanel() {
+async function fetchUsersEmails() {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const emails = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (data && data.email) emails.push({ uid: d.id, email: String(data.email).toLowerCase() });
+    });
+    return emails;
+  } catch (err) {
+    console.error('Error fetch users:', err);
+    return [];
+  }
+}
+
+async function createAdminPanel() {
   const panel = document.createElement('div');
   panel.id = 'adminPanel';
   panel.style.cssText = `
     position:fixed;right:18px;top:80px;z-index:99999;
-    width:380px;background:linear-gradient(180deg,#111,#0e0e0e);
-    border-radius:12px;padding:16px;
-    box-shadow:0 8px 30px rgba(0,0,0,0.6);
+    width:420px;max-width:95vw;background:linear-gradient(180deg,#111,#0e0e0e);
+    border-radius:12px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.6);
     color:#fff;font-family:Arial,Helvetica,sans-serif;
   `;
 
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 style="margin:0;font-size:16px">Panel Admin</h3>
+      <h3 style="margin:0;font-size:16px">Panel Admin (Insert)</h3>
       <button id="closeAdminPanel" style="background:#222;border:none;color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer">✕</button>
     </div>
 
@@ -333,26 +351,35 @@ function createAdminPanel() {
       <option value="item">Regalar Ítem</option>
     </select>
 
-    <!-- Campos para Robux -->
     <div id="robuxFields">
-      <input id="robuxEmail" type="email" placeholder="Email del destinatario" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="robuxAmount" type="number" placeholder="Cantidad de Robux" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <label style="font-size:13px;color:#ccc">Selecciona destinatario (desde Firestore):</label>
+      <select id="robuxSelect" style="width:100%;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff;margin:6px 0"></select>
+      <div style="text-align:center;color:#888;margin-bottom:8px">o escribe manualmente</div>
+      <input id="robuxEmailManual" type="email" placeholder="Email destinatario (manual)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+      <input id="robuxAmount" type="number" placeholder="Cantidad de Robux" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
       <button id="sendRobuxBtn" style="background:#0a84ff;border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%">Enviar Robux</button>
     </div>
 
-    <!-- Campos para Ítems -->
     <div id="itemFields" style="display:none">
-      <input id="itemEmail" type="email" placeholder="Email del destinatario" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="itemName" type="text" placeholder="Nombre del ítem" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="itemImage" type="text" placeholder="URL de imagen" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="itemTagText" type="text" placeholder="Texto del tag (opcional)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="itemTagBg" type="text" placeholder="Color fondo tag (#ff0000)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
-      <input id="itemTagColor" type="text" placeholder="Color texto tag (#ffffff)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff">
+      <label style="font-size:13px;color:#ccc">Selecciona destinatario (desde Firestore):</label>
+      <select id="itemSelect" style="width:100%;padding:8px;border-radius:6px;border:none;background:#0f0f0f;color:#fff;margin:6px 0"></select>
+      <div style="text-align:center;color:#888;margin-bottom:8px">o escribe manualmente</div>
+      <input id="itemEmailManual" type="email" placeholder="Email destinatario (manual)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+
+      <input id="itemName" type="text" placeholder="Nombre del ítem" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+      <input id="itemImage" type="text" placeholder="URL de imagen" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+      <input id="itemTagText" type="text" placeholder="Texto del tag (opcional)" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+      <div style="display:flex;gap:8px">
+        <input id="itemTagBg" type="text" placeholder="Color fondo tag (#ff0000)" style="flex:1;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+        <input id="itemTagColor" type="text" placeholder="Color texto tag (#ffffff)" style="flex:1;padding:8px;border-radius:6px;border:1px solid #222;background:#0f0f0f;color:#fff">
+      </div>
+      <div style="height:10px"></div>
       <button id="sendItemBtn" style="background:#00c853;border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;width:100%">Enviar Ítem</button>
     </div>
 
     <div id="adminMsg" style="margin-top:10px;font-size:13px;color:#ccc"></div>
   `;
+
   document.body.appendChild(panel);
 
   document.getElementById("closeAdminPanel").onclick = () => panel.remove();
@@ -360,6 +387,10 @@ function createAdminPanel() {
   const adminAction = document.getElementById("adminAction");
   const robuxFields = document.getElementById("robuxFields");
   const itemFields = document.getElementById("itemFields");
+  const robuxSelect = document.getElementById("robuxSelect");
+  const itemSelect = document.getElementById("itemSelect");
+  const robuxEmailManual = document.getElementById("robuxEmailManual");
+  const itemEmailManual = document.getElementById("itemEmailManual");
 
   adminAction.onchange = () => {
     const action = adminAction.value;
@@ -367,15 +398,42 @@ function createAdminPanel() {
     itemFields.style.display = action === "item" ? "block" : "none";
   };
 
-  // ======== AÑADIR ROBUX ========
+  // cargar lista de usuarios desde Firestore y poblarla en los selects
+  const emails = await fetchUsersEmails();
+  function populateSelect(sel, list) {
+    sel.innerHTML = '';
+    if (!list.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No hay usuarios en Firestore';
+      sel.appendChild(opt);
+      return;
+    }
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '-- seleccionar usuario --';
+    sel.appendChild(placeholder);
+    for (const u of list) {
+      const o = document.createElement('option');
+      o.value = u.email;
+      o.textContent = u.email;
+      sel.appendChild(o);
+    }
+  }
+  populateSelect(robuxSelect, emails);
+  populateSelect(itemSelect, emails);
+
+  // Enviar Robux (usa callable function)
   document.getElementById("sendRobuxBtn").onclick = async () => {
     const msg = document.getElementById("adminMsg");
-    const email = document.getElementById("robuxEmail").value.trim().toLowerCase();
+    const selected = robuxSelect.value;
+    const manual = robuxEmailManual.value.trim().toLowerCase();
+    const targetEmail = selected || manual;
     const amount = Number(document.getElementById("robuxAmount").value || 0);
 
-    if (!email || amount <= 0) {
+    if (!targetEmail || amount <= 0) {
       msg.style.color = "#ff8a80";
-      msg.textContent = "Introduce un email válido y cantidad mayor que 0.";
+      msg.textContent = "Selecciona destinatario o escribe un email válido, y cantidad > 0.";
       return;
     }
 
@@ -384,29 +442,32 @@ function createAdminPanel() {
 
     try {
       const fn = httpsCallable(functions, "adminAddRobux");
-      const res = await fn({ targetEmail: email, amount });
+      const res = await fn({ targetEmail, amount });
       msg.style.color = "#8bc34a";
       msg.textContent = res.data?.message || "Robux enviados correctamente.";
     } catch (err) {
-      msg.style.color = "#ff8a80";
-      msg.textContent = err.message || "Error al enviar Robux.";
       console.error(err);
+      msg.style.color = "#ff8a80";
+      msg.textContent = err?.message || "Error al enviar Robux.";
     }
   };
 
-  // ======== REGALAR ÍTEM ========
+  // Enviar Ítem (usa callable function)
   document.getElementById("sendItemBtn").onclick = async () => {
     const msg = document.getElementById("adminMsg");
-    const email = document.getElementById("itemEmail").value.trim().toLowerCase();
+    const selected = itemSelect.value;
+    const manual = itemEmailManual.value.trim().toLowerCase();
+    const targetEmail = selected || manual;
+
     const title = document.getElementById("itemName").value.trim();
     const image = document.getElementById("itemImage").value.trim();
     const tagText = document.getElementById("itemTagText").value.trim();
-    const tagBg = document.getElementById("itemTagBg").value.trim() || "#000";
-    const tagColor = document.getElementById("itemTagColor").value.trim() || "#fff";
+    const tagBg = document.getElementById("itemTagBg").value.trim() || '#000';
+    const tagColor = document.getElementById("itemTagColor").value.trim() || '#fff';
 
-    if (!email || !title || !image) {
+    if (!targetEmail || !title || !image) {
       msg.style.color = "#ff8a80";
-      msg.textContent = "Completa email, nombre e imagen del ítem.";
+      msg.textContent = "Selecciona destinatario o escribe email; completa nombre e imagen.";
       return;
     }
 
@@ -416,15 +477,15 @@ function createAdminPanel() {
     try {
       const fn = httpsCallable(functions, "adminGiveItem");
       const res = await fn({
-        targetEmail: email,
+        targetEmail,
         item: { title, image, tagText, tagBg, tagColor }
       });
       msg.style.color = "#8bc34a";
       msg.textContent = res.data?.message || "Ítem enviado correctamente.";
     } catch (err) {
-      msg.style.color = "#ff8a80";
-      msg.textContent = err.message || "Error al enviar ítem.";
       console.error(err);
+      msg.style.color = "#ff8a80";
+      msg.textContent = err?.message || "Error al enviar ítem.";
     }
   };
 }
