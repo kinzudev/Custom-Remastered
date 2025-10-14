@@ -426,52 +426,59 @@ document.body.style.overflowY = "scroll";
 </script>
 
 <script>
-  // 🛒 Función para actualizar botones según el stock
+  // ✅ Función que verifica y actualiza el estado del botón según el stock
   function actualizarBotonesStock() {
-    document.querySelectorAll('.card').forEach(card => {
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
       const stockEl = card.querySelector('.stock');
       const buyBtn = card.querySelector('.buy-btn');
-      if (stockEl && buyBtn) {
-        const texto = stockEl.textContent.toLowerCase();
-        const sinStock = texto.includes('sin stock') || /\b0\b/.test(texto);
-        if (sinStock) {
-          buyBtn.disabled = true;
-          buyBtn.textContent = 'Sin stock';
-          buyBtn.classList.add('disabled');
-        } else {
-          buyBtn.disabled = false;
-          buyBtn.textContent = 'Comprar';
-          buyBtn.classList.remove('disabled');
-        }
+
+      if (!stockEl || !buyBtn) return;
+
+      const texto = stockEl.textContent.trim().toLowerCase();
+      const sinStock = texto.includes('sin stock') || /\b0\b/.test(texto);
+
+      if (sinStock) {
+        buyBtn.disabled = true;
+        buyBtn.textContent = 'Sin stock';
+        buyBtn.style.opacity = '0.6';
+        buyBtn.style.cursor = 'not-allowed';
+      } else {
+        buyBtn.disabled = false;
+        buyBtn.textContent = 'Comprar';
+        buyBtn.style.opacity = '1';
+        buyBtn.style.cursor = 'pointer';
       }
     });
   }
 
-  // Actualiza una vez al cargar
-  actualizarBotonesStock();
+  // 🔄 Llama una vez al cargar
+  window.addEventListener('load', () => {
+    actualizarBotonesStock();
+  });
 
-  // 🕒 Observa solo los nuevos elementos añadidos al grid
+  // 🎯 Cada vez que se hace clic en "Comprar"
+  document.addEventListener('click', e => {
+    if (e.target.classList.contains('buy-btn')) {
+      // Espera que Firebase actualice el stock y luego refresca
+      setTimeout(actualizarBotonesStock, 500);
+    }
+  });
+
+  // 🔥 Observa SOLO el contenedor principal, sin entrar en loops infinitos
   const grid = document.getElementById('itemsGrid');
   if (grid) {
-    const observer = new MutationObserver(mutations => {
-      let added = false;
-      mutations.forEach(m => {
-        if (m.addedNodes.length > 0) added = true;
-      });
-      if (added) {
-        // Espera un pequeño tiempo para evitar loops
-        setTimeout(actualizarBotonesStock, 100);
-      }
+    const observer = new MutationObserver(() => {
+      // Desconecta temporalmente para evitar bucles
+      observer.disconnect();
+      setTimeout(() => {
+        actualizarBotonesStock();
+        // Reconecta después de actualizar
+        observer.observe(grid, { childList: true });
+      }, 200);
     });
     observer.observe(grid, { childList: true });
   }
-
-  // También actualiza cuando se hace una compra manual
-  document.addEventListener('click', e => {
-    if (e.target.classList.contains('buy-btn')) {
-      setTimeout(actualizarBotonesStock, 200);
-    }
-  });
 </script>
 
 </body>
