@@ -118,7 +118,13 @@
       const price=parseInt(prompt('Precio (R$):')||'0');
       const rap=parseInt(prompt('RAP:')||'0');
       const stock=parseInt(prompt('Stock disponible:')||'0');
-      addDoc(collection(db,'items'),{title,image,price,rap,stock,created:Date.now()});
+      const tagText=prompt('Texto del tag (opcional):')||'';
+      let tagBg=null, tagColor=null;
+      if(tagText){
+        tagBg=prompt('Color de fondo del tag (ej: #ff0000 o red):')||'#ff0000';
+        tagColor=prompt('Color del texto del tag (ej: #ffffff o white):')||'#ffffff';
+      }
+      addDoc(collection(db,'items'),{title,image,price,rap,stock,tagText,tagBg,tagColor,created:Date.now()});
     }
 
     function loadItemsRealtime(){
@@ -133,6 +139,7 @@
           card.innerHTML=`
             <img src="${d.image||'https://via.placeholder.com/150'}">
             <div class="title">${d.title||'Sin título'}</div>
+            ${d.tagText ? `<div class="item-tag" style="background:${d.tagBg};color:${d.tagColor};">${d.tagText}</div>` : ''}
             <div class="tag">RAP: ${d.rap||0}</div>
             <div class="price">R$${d.price||0}</div>
             <div class="stock">Stock: ${d.stock||0}</div>
@@ -191,6 +198,7 @@
           card.innerHTML=`
             <img src="${d.image||'https://via.placeholder.com/150'}">
             <div class="title">${d.title}</div>
+            ${d.tagText ? `<div class="item-tag" style="background:${d.tagBg};color:${d.tagColor};">${d.tagText}</div>` : ''}
             <div class="tag">RAP: ${d.rap}</div>
             <div class="price">R$${d.price}</div>`;
           itemsGrid.appendChild(card);
