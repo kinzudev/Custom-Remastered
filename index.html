@@ -117,14 +117,21 @@
       const image=prompt('URL de la imagen:')||'';
       const price=parseInt(prompt('Precio (R$):')||'0');
       const rap=parseInt(prompt('RAP:')||'0');
-      const stock=parseInt(prompt('Stock disponible:')||'0');
+      let stockInput=prompt('Stock disponible (0 o vacío = infinito):')||'';
+      let stock=stockInput.trim()===''?0:parseInt(stockInput);
       const tagText=prompt('Texto del tag (opcional):')||'';
       let tagBg=null, tagColor=null;
       if(tagText){
         tagBg=prompt('Color de fondo del tag (ej: #ff0000 o red):')||'#ff0000';
         tagColor=prompt('Color del texto del tag (ej: #ffffff o white):')||'#ffffff';
       }
-      addDoc(collection(db,'items'),{title,image,price,rap,stock,tagText,tagBg,tagColor,created:Date.now()});
+      const timeLimit=prompt('Tiempo limitado en minutos (opcional, vacío = sin límite):');
+      let endTime=null;
+      if(timeLimit && !isNaN(timeLimit) && parseInt(timeLimit)>0){
+        endTime=Date.now() + parseInt(timeLimit)*60000;
+      }
+
+      addDoc(collection(db,'items'),{title,image,price,rap,stock,tagText,tagBg,tagColor,endTime,created:Date.now()});
     }
 
     function loadItemsRealtime(){
@@ -136,14 +143,40 @@
           const d=s.data();
           const card=document.createElement('div');
           card.className='card';
+
+          // Temporizador
+          let timerHTML='';
+          if(d.endTime){
+            const remain = d.endTime - Date.now();
+            if(remain>0){
+              const mins=Math.floor(remain/60000);
+              const secs=Math.floor((remain%60000)/1000);
+              timerHTML=`<div class="timer">⏰ ${mins}m ${secs}s</div>`;
+              const interval=setInterval(()=>{
+                const left=d.endTime - Date.now();
+                if(left<=0){clearInterval(interval);loadItemsRealtime();}
+                else{
+                  const m=Math.floor(left/60000);
+                  const s=Math.floor((left%60000)/1000);
+                  timerDiv.innerText=`⏰ ${m}m ${s}s`;
+                }
+              },1000);
+            } else {
+              timerHTML=`<div class="timer expired">Expirado ⏰</div>`;
+            }
+          }
+
           card.innerHTML=`
+            ${timerHTML}
             <img src="${d.image||'https://via.placeholder.com/150'}">
             <div class="title">${d.title||'Sin título'}</div>
             ${d.tagText ? `<div class="item-tag" style="background:${d.tagBg};color:${d.tagColor};">${d.tagText}</div>` : ''}
             <div class="tag">RAP: ${d.rap||0}</div>
             <div class="price">R$${d.price||0}</div>
-            <div class="stock">Stock: ${d.stock||0}</div>
+            ${d.stock>0 ? `<div class="stock">Stock: ${d.stock}</div>` : ''}
           `;
+
+          const isExpired = d.endTime && Date.now() >= d.endTime;
 
           if(currentUser.email==='kinzudev@gmail.com'){
             const del=document.createElement('button');
@@ -153,9 +186,9 @@
             card.appendChild(del);
           } else {
             const buy=document.createElement('button');
-            buy.textContent=d.stock>0?'Comprar':'Sin stock';
+            buy.textContent=isExpired?'Expirado ⏰':(d.stock>0 || d.stock===0?'Comprar':'Sin stock');
             buy.className='buy-btn';
-            buy.disabled=d.stock<=0;
+            buy.disabled=isExpired || (d.stock>0 && d.stock<=0);
             buy.onclick=()=>buyItem(s.id,d);
             card.appendChild(buy);
           }
@@ -170,7 +203,9 @@
       const itemRef=doc(db,'items',id);
       const itemSnap=await getDoc(itemRef);
       const item=itemSnap.data();
-      if(item.stock<=0)return alert("No hay stock disponible.");
+
+      if(item.endTime && Date.now()>=item.endTime)return alert("Este ítem ha expirado ⏰");
+      if(item.stock>0 && item.stock<=0)return alert("No hay stock disponible.");
 
       const userRef=doc(db,'users',currentUser.uid);
       const userSnap=await getDoc(userRef);
@@ -178,7 +213,7 @@
       if(bal<(item.price||0))return alert('No tienes Robux suficientes.');
 
       await updateDoc(userRef,{robux:bal-item.price});
-      await updateDoc(itemRef,{stock:item.stock-1});
+      if(item.stock>0) await updateDoc(itemRef,{stock:item.stock-1});
       await addDoc(collection(db,'users',currentUser.uid,'inventory'),{...item,itemId:id,purchasedAt:Date.now()});
       alert('Compra realizada ✅');
     }
