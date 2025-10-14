@@ -285,20 +285,35 @@
   </script>
 
 <script type="module">
-import { collection, addDoc, getDoc, getDocs, doc, setDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
-import { db, auth } from './main.js'; // si tu archivo principal se llama diferente, ajusta este import
+import {
+  collection,
+  addDoc,
+  getDocs,
+  onSnapshot,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { db, auth } from "./main.js"; // Ajusta si tu archivo principal tiene otro nombre
 
-// === CANJE DE CÓDIGOS ===
-const sidebar = document.querySelector('.sidebar');
-const redeemLink = document.createElement('a');
+// === BOTÓN DE CANJE EN LA SIDEBAR ===
+const sidebar = document.querySelector(".sidebar");
+const redeemLink = document.createElement("a");
 redeemLink.href = "#";
 redeemLink.textContent = "Canjear código";
 sidebar.insertBefore(redeemLink, sidebar.lastElementChild);
 
-const main = document.querySelector('.main');
+const main = document.querySelector(".main");
 
 redeemLink.onclick = (e) => {
   e.preventDefault();
+  showRedeemPanel();
+};
+
+// === INTERFAZ DE CANJE ===
+function showRedeemPanel() {
   main.innerHTML = `
     <section class="redeem-section">
       <h3>Canjear código</h3>
@@ -308,31 +323,69 @@ redeemLink.onclick = (e) => {
       </div>
       <div id="redeemMsg"></div>
       <div id="adminControls"></div>
+      <div id="codesList"></div>
     </section>
   `;
 
-  if (auth.currentUser?.email === 'kinzudev@gmail.com') {
-    const adminDiv = document.getElementById('adminControls');
-    const btn = document.createElement('button');
-    btn.textContent = "Crear código nuevo";
-    btn.onclick = createCodePrompt;
-    adminDiv.appendChild(btn);
+  document.getElementById("redeemBtn").onclick = redeemCode;
+
+  if (auth.currentUser?.email === "kinzudev@gmail.com") {
+    setupAdminPanel();
   }
+}
 
-  document.getElementById('redeemBtn').onclick = redeemCode;
-};
+// === PANEL ADMIN (CREAR, VER Y ELIMINAR CÓDIGOS) ===
+function setupAdminPanel() {
+  const adminDiv = document.getElementById("adminControls");
+  adminDiv.innerHTML = `
+    <h4>Panel de administración</h4>
+    <button id="createCodeBtn">➕ Crear nuevo código</button>
+  `;
 
-// === CREAR CÓDIGO (ADMIN) ===
+  document.getElementById("createCodeBtn").onclick = createCodePrompt;
+
+  const codesList = document.getElementById("codesList");
+  const codesRef = collection(db, "codes");
+
+  onSnapshot(codesRef, (snap) => {
+    codesList.innerHTML = "<h4>Lista de códigos</h4>";
+    snap.forEach((docSnap) => {
+      const c = docSnap.data();
+      const card = document.createElement("div");
+      card.className = "code-card";
+      card.innerHTML = `
+        <strong>${c.code}</strong> - ${c.type === "robux" ? `💰 ${c.value} R$` : `🎁 Ítem: ${c.itemData?.title || "?"}`}
+        <span class="status ${c.active ? "active" : "expired"}">
+          ${c.active ? "Activo" : "Expirado"}
+        </span>
+      `;
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑️";
+      delBtn.className = "delete-btn";
+      delBtn.onclick = async () => {
+        if (confirm(`¿Expirar el código ${c.code}?`)) {
+          await updateDoc(doc(db, "codes", docSnap.id), { active: false });
+        }
+      };
+      card.appendChild(delBtn);
+      codesList.appendChild(card);
+    });
+  });
+}
+
+// === CREAR CÓDIGO ===
 async function createCodePrompt() {
-  const code = prompt("Nombre del código (ej: HALLOWEEN2025):");
+  const code = prompt("Nombre del código (ej: NAVIDAD2025):");
   if (!code) return;
-  const type = prompt("Tipo de recompensa: 'robux' o 'item'").toLowerCase();
-  let data = { code, active: true, type };
 
-  if (type === 'robux') {
-    const amount = parseInt(prompt("Cantidad de Robux que otorga:"));
-    data.value = amount || 0;
-  } else if (type === 'item') {
+  const type = prompt("Tipo de recompensa: 'robux' o 'item'").toLowerCase();
+  let data = { code: code.toUpperCase(), active: true, type };
+
+  if (type === "robux") {
+    const amount = parseInt(prompt("Cantidad de Robux que otorga:") || "0");
+    data.value = amount;
+  } else if (type === "item") {
     const title = prompt("Nombre del ítem:");
     const image = prompt("URL de la imagen:");
     const rap = parseInt(prompt("RAP del ítem:") || "0");
@@ -351,27 +404,34 @@ async function createCodePrompt() {
 
 // === CANJEAR CÓDIGO ===
 async function redeemCode() {
-  const code = document.getElementById('codeInput').value.trim().toUpperCase();
-  const msg = document.getElementById('redeemMsg');
-  msg.textContent = '';
+  const code = document.getElementById("codeInput").value.trim().toUpperCase();
+  const msg = document.getElementById("redeemMsg");
+  msg.textContent = "";
 
   if (!code) return alert("Introduce un código válido.");
 
   const codesSnap = await getDocs(collection(db, "codes"));
   let found = null;
-  codesSnap.forEach(c => {
+  codesSnap.forEach((c) => {
     if (c.data().code.toUpperCase() === code) found = { id: c.id, ...c.data() };
   });
 
-  if (!found || !found.active) {
-    msg.textContent = "❌ Código no válido o inactivo.";
+  if (!found) {
+    msg.textContent = "❌ Código no válido.";
     msg.style.color = "red";
+    return;
+  }
+
+  if (!found.active) {
+    msg.textContent = "⚠️ Código expirado.";
+    msg.style.color = "orange";
     return;
   }
 
   const userRef = doc(db, "users", auth.currentUser.uid);
   const usedRef = doc(db, `users/${auth.currentUser.uid}/usedCodes`, found.id);
   const usedSnap = await getDoc(usedRef);
+
   if (usedSnap.exists()) {
     msg.textContent = "⚠️ Ya usaste este código.";
     msg.style.color = "orange";
@@ -389,7 +449,7 @@ async function redeemCode() {
     await addDoc(collection(db, `users/${auth.currentUser.uid}/inventory`), {
       ...found.itemData,
       fromCode: code,
-      receivedAt: Date.now()
+      receivedAt: Date.now(),
     });
     await setDoc(usedRef, { usedAt: Date.now() });
     msg.textContent = `🎁 ¡Has recibido el ítem "${found.itemData.title}"!`;
