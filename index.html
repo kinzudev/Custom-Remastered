@@ -285,38 +285,38 @@
   </script>
 
 <script type="module">
-import {
-  collection,
-  addDoc,
-  getDocs,
-  onSnapshot,
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  deleteDoc
-} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-import { db, auth } from "./main.js"; // Ajusta si tu archivo principal tiene otro nombre
+import { 
+  collection, addDoc, getDoc, getDocs, doc, setDoc, updateDoc, deleteDoc 
+} from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
+import { db, auth } from './main.js';
 
-// === BOTÓN DE CANJE EN LA SIDEBAR ===
-const sidebar = document.querySelector(".sidebar");
-const redeemLink = document.createElement("a");
-redeemLink.href = "#";
-redeemLink.textContent = "Canjear código";
-sidebar.insertBefore(redeemLink, sidebar.lastElementChild);
+// Esperar a que el DOM cargue completamente antes de insertar el botón
+window.addEventListener('DOMContentLoaded', () => {
+  const observer = new MutationObserver(() => {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && !sidebar.querySelector('.redeem-link')) {
+      const redeemLink = document.createElement('a');
+      redeemLink.href = "#";
+      redeemLink.textContent = "Canjear código";
+      redeemLink.classList.add('redeem-link');
+      sidebar.appendChild(redeemLink);
 
-const main = document.querySelector(".main");
+      redeemLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        openRedeemSection();
+      });
+      observer.disconnect(); // deja de observar cuando se añadió
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+});
 
-redeemLink.onclick = (e) => {
-  e.preventDefault();
-  showRedeemPanel();
-};
-
-// === INTERFAZ DE CANJE ===
-function showRedeemPanel() {
+// === MOSTRAR SECCIÓN DE CANJE ===
+async function openRedeemSection() {
+  const main = document.querySelector('.main');
   main.innerHTML = `
     <section class="redeem-section">
-      <h3>Canjear código</h3>
+      <h3>🎁 Canjear código</h3>
       <div class="form-row">
         <input id="codeInput" placeholder="Introduce tu código">
         <button id="redeemBtn">Canjear</button>
@@ -327,69 +327,34 @@ function showRedeemPanel() {
     </section>
   `;
 
-  document.getElementById("redeemBtn").onclick = redeemCode;
+  document.getElementById('redeemBtn').onclick = redeemCode;
 
-  if (auth.currentUser?.email === "kinzudev@gmail.com") {
-    setupAdminPanel();
+  // Si es admin, mostrar controles de creación y listado
+  if (auth.currentUser?.email === 'kinzudev@gmail.com') {
+    const adminDiv = document.getElementById('adminControls');
+    const btn = document.createElement('button');
+    btn.textContent = "➕ Crear código nuevo";
+    btn.onclick = createCodePrompt;
+    adminDiv.appendChild(btn);
+    loadCodesList();
   }
 }
 
-// === PANEL ADMIN (CREAR, VER Y ELIMINAR CÓDIGOS) ===
-function setupAdminPanel() {
-  const adminDiv = document.getElementById("adminControls");
-  adminDiv.innerHTML = `
-    <h4>Panel de administración</h4>
-    <button id="createCodeBtn">➕ Crear nuevo código</button>
-  `;
-
-  document.getElementById("createCodeBtn").onclick = createCodePrompt;
-
-  const codesList = document.getElementById("codesList");
-  const codesRef = collection(db, "codes");
-
-  onSnapshot(codesRef, (snap) => {
-    codesList.innerHTML = "<h4>Lista de códigos</h4>";
-    snap.forEach((docSnap) => {
-      const c = docSnap.data();
-      const card = document.createElement("div");
-      card.className = "code-card";
-      card.innerHTML = `
-        <strong>${c.code}</strong> - ${c.type === "robux" ? `💰 ${c.value} R$` : `🎁 Ítem: ${c.itemData?.title || "?"}`}
-        <span class="status ${c.active ? "active" : "expired"}">
-          ${c.active ? "Activo" : "Expirado"}
-        </span>
-      `;
-
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "🗑️";
-      delBtn.className = "delete-btn";
-      delBtn.onclick = async () => {
-        if (confirm(`¿Expirar el código ${c.code}?`)) {
-          await updateDoc(doc(db, "codes", docSnap.id), { active: false });
-        }
-      };
-      card.appendChild(delBtn);
-      codesList.appendChild(card);
-    });
-  });
-}
-
-// === CREAR CÓDIGO ===
+// === CREAR CÓDIGO (ADMIN) ===
 async function createCodePrompt() {
-  const code = prompt("Nombre del código (ej: NAVIDAD2025):");
+  const code = prompt("Nombre del código (ej: HALLOWEEN2025):");
   if (!code) return;
-
   const type = prompt("Tipo de recompensa: 'robux' o 'item'").toLowerCase();
-  let data = { code: code.toUpperCase(), active: true, type };
+  let data = { code, active: true, type };
 
-  if (type === "robux") {
-    const amount = parseInt(prompt("Cantidad de Robux que otorga:") || "0");
-    data.value = amount;
-  } else if (type === "item") {
+  if (type === 'robux') {
+    const amount = parseInt(prompt("Cantidad de Robux que otorga:"));
+    data.value = amount || 0;
+  } else if (type === 'item') {
     const title = prompt("Nombre del ítem:");
     const image = prompt("URL de la imagen:");
     const rap = parseInt(prompt("RAP del ítem:") || "0");
-    const price = parseInt(prompt("Precio simbólico (solo visual):") || "0");
+    const price = parseInt(prompt("Precio simbólico:") || "0");
     const tagText = prompt("Texto del tag (opcional):") || "";
     const tagBg = tagText ? prompt("Color de fondo del tag:") || "#ff0000" : "";
     const tagColor = tagText ? prompt("Color del texto del tag:") || "#ffffff" : "";
@@ -400,19 +365,20 @@ async function createCodePrompt() {
 
   await addDoc(collection(db, "codes"), data);
   alert("✅ Código creado correctamente.");
+  loadCodesList();
 }
 
 // === CANJEAR CÓDIGO ===
 async function redeemCode() {
-  const code = document.getElementById("codeInput").value.trim().toUpperCase();
-  const msg = document.getElementById("redeemMsg");
-  msg.textContent = "";
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const msg = document.getElementById('redeemMsg');
+  msg.textContent = '';
 
   if (!code) return alert("Introduce un código válido.");
 
   const codesSnap = await getDocs(collection(db, "codes"));
   let found = null;
-  codesSnap.forEach((c) => {
+  codesSnap.forEach(c => {
     if (c.data().code.toUpperCase() === code) found = { id: c.id, ...c.data() };
   });
 
@@ -431,7 +397,6 @@ async function redeemCode() {
   const userRef = doc(db, "users", auth.currentUser.uid);
   const usedRef = doc(db, `users/${auth.currentUser.uid}/usedCodes`, found.id);
   const usedSnap = await getDoc(usedRef);
-
   if (usedSnap.exists()) {
     msg.textContent = "⚠️ Ya usaste este código.";
     msg.style.color = "orange";
@@ -449,12 +414,40 @@ async function redeemCode() {
     await addDoc(collection(db, `users/${auth.currentUser.uid}/inventory`), {
       ...found.itemData,
       fromCode: code,
-      receivedAt: Date.now(),
+      receivedAt: Date.now()
     });
     await setDoc(usedRef, { usedAt: Date.now() });
     msg.textContent = `🎁 ¡Has recibido el ítem "${found.itemData.title}"!`;
     msg.style.color = "limegreen";
   }
+}
+
+// === LISTADO DE CÓDIGOS (ADMIN) ===
+async function loadCodesList() {
+  const list = document.getElementById('codesList');
+  list.innerHTML = `<h4>📜 Códigos activos</h4>`;
+  const snap = await getDocs(collection(db, "codes"));
+  snap.forEach(c => {
+    const data = c.data();
+    const div = document.createElement('div');
+    div.className = "code-item";
+    div.innerHTML = `
+      <strong>${data.code}</strong> — ${data.type === 'robux' ? `${data.value} Robux` : data.itemData?.title || 'Ítem'}
+      ${data.active ? "<span style='color:lime'>[Activo]</span>" : "<span style='color:red'>[Expirado]</span>"}
+      <button class="delete-code" data-id="${c.id}">🗑️</button>
+    `;
+    list.appendChild(div);
+  });
+
+  document.querySelectorAll('.delete-code').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      if (confirm("¿Seguro que quieres eliminar este código?")) {
+        await updateDoc(doc(db, "codes", id), { active: false });
+        loadCodesList();
+      }
+    };
+  });
 }
 </script>
 
