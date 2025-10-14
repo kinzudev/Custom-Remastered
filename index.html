@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Simulador Roblox - Catálogo</title>
+  <title>Custom</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <canvas id="bgCanvas"></canvas>
 
-  <div class="topbar">Simulador de Catálogo
-    <div id="robuxDisplay"><img src="ROBUX_2014_Logo.svg.png" alt="R$"> <span id="robuxAmount">0</span></div>
+  <div class="topbar">Estamos trabajando para mejorar la pagina!
+    <div id="robuxDisplay"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/ROBUX_2014_Logo.svg/1200px-ROBUX_2014_Logo.svg.png" alt="R$"> <span id="robuxAmount">0</span></div>
   </div>
 
   <div class="app">
     <aside class="sidebar">
       <h2>Menú</h2>
+      <a href="#" id="catalogLink">Catálogo</a>
       <a href="#" id="inventoryLink">Inventario</a>
       <a class="upgrade" href="#" id="logoutBtn">Salir</a>
     </aside>
@@ -67,6 +68,7 @@
     const itemsGrid = document.getElementById('itemsGrid');
     const robuxAmount = document.getElementById('robuxAmount');
     const inventoryLink = document.getElementById('inventoryLink');
+    const catalogLink = document.getElementById('catalogLink');
     const controls = document.getElementById('controls');
     const sectionTitle = document.getElementById('sectionTitle');
     const authOverlay = document.getElementById('authOverlay');
@@ -76,13 +78,17 @@
     let itemsUnsub = null;
 
     registerBtn.onclick = async () => {
-      try { await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }
-      catch(e){ alert(e.message); }
+      try {
+        await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
+      } catch(e){ alert(e.message); }
     };
+
     loginBtn.onclick = async () => {
-      try { await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }
-      catch(e){ alert(e.message); }
+      try {
+        await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
+      } catch(e){ alert(e.message); }
     };
+
     logoutBtn.onclick = async () => await signOut(auth);
 
     onAuthStateChanged(auth, async user => {
@@ -99,8 +105,33 @@
 
     async function initApp(){
       const userRef = doc(db,'users',currentUser.uid);
-      await setDoc(userRef,{email:currentUser.email,robux:1000},{merge:true});
-      onSnapshot(userRef,snap=>{if(snap.exists())robuxAmount.textContent=snap.data().robux||0;});
+      const snap = await getDoc(userRef);
+
+      // Crear usuario con saldo inicial si no existe
+      if(!snap.exists()){
+        await setDoc(userRef,{
+          email:currentUser.email,
+          robux:85,
+          lastReward:Date.now()
+        });
+      } else {
+        const data = snap.data();
+        // Recompensa diaria
+        const now = Date.now();
+        const last = data.lastReward || 0;
+        const oneDay = 24*60*60*1000;
+        if(now - last >= oneDay){
+          await updateDoc(userRef,{
+            robux:(data.robux||0)+50,
+            lastReward:now
+          });
+          alert('¡Has recibido tu recompensa diaria de 50 Robux! 🎁');
+        }
+      }
+
+      // Actualizar Robux en tiempo real
+      onSnapshot(userRef,s=>{if(s.exists())robuxAmount.textContent=s.data().robux||0;});
+
       controls.innerHTML='';
       if(currentUser.email==='kinzudev@gmail.com'){
         const btn=document.createElement('button');
@@ -108,6 +139,7 @@
         btn.onclick=adminAddItem;
         controls.appendChild(btn);
       }
+
       loadItemsRealtime();
     }
 
@@ -148,22 +180,7 @@
           let timerHTML='';
           if(d.endTime){
             const remain = d.endTime - Date.now();
-            if(remain>0){
-              const mins=Math.floor(remain/60000);
-              const secs=Math.floor((remain%60000)/1000);
-              timerHTML=`<div class="timer">⏰ ${mins}m ${secs}s</div>`;
-              const interval=setInterval(()=>{
-                const left=d.endTime - Date.now();
-                if(left<=0){clearInterval(interval);loadItemsRealtime();}
-                else{
-                  const m=Math.floor(left/60000);
-                  const s=Math.floor((left%60000)/1000);
-                  timerDiv.innerText=`⏰ ${m}m ${s}s`;
-                }
-              },1000);
-            } else {
-              timerHTML=`<div class="timer expired">Expirado ⏰</div>`;
-            }
+            timerHTML = remain > 0 ? `<div class="timer">⏰ ${Math.floor(remain/60000)}m ${Math.floor((remain%60000)/1000)}s</div>` : `<div class="timer expired">Expirado ⏰</div>`;
           }
 
           card.innerHTML=`
@@ -218,30 +235,32 @@
       alert('Compra realizada ✅');
     }
 
+    catalogLink.onclick = (e)=>{
+      e.preventDefault();
+      sectionTitle.textContent='Catálogo';
+      viewingInventory=false;
+      loadItemsRealtime();
+    };
+
     inventoryLink.onclick=async(e)=>{
       e.preventDefault();
-      viewingInventory=!viewingInventory;
-      if(viewingInventory){
-        sectionTitle.textContent='Inventario';
-        if(itemsUnsub){itemsUnsub();itemsUnsub=null;}
-        const inv=await getDocs(collection(db,'users',currentUser.uid,'inventory'));
-        itemsGrid.innerHTML='';
-        inv.forEach(s=>{
-          const d=s.data();
-          const card=document.createElement('div');
-          card.className='card';
-          card.innerHTML=`
-            <img src="${d.image||'https://via.placeholder.com/150'}">
-            <div class="title">${d.title}</div>
-            ${d.tagText ? `<div class="item-tag" style="background:${d.tagBg};color:${d.tagColor};">${d.tagText}</div>` : ''}
-            <div class="tag">RAP: ${d.rap}</div>
-            <div class="price">R$${d.price}</div>`;
-          itemsGrid.appendChild(card);
-        });
-      } else {
-        sectionTitle.textContent='Catálogo';
-        loadItemsRealtime();
-      }
+      viewingInventory=true;
+      sectionTitle.textContent='Inventario';
+      if(itemsUnsub){itemsUnsub();itemsUnsub=null;}
+      const inv=await getDocs(collection(db,'users',currentUser.uid,'inventory'));
+      itemsGrid.innerHTML='';
+      inv.forEach(s=>{
+        const d=s.data();
+        const card=document.createElement('div');
+        card.className='card';
+        card.innerHTML=`
+          <img src="${d.image||'https://via.placeholder.com/150'}">
+          <div class="title">${d.title}</div>
+          ${d.tagText ? `<div class="item-tag" style="background:${d.tagBg};color:${d.tagColor};">${d.tagText}</div>` : ''}
+          <div class="tag">RAP: ${d.rap}</div>
+          <div class="price">R$${d.price}</div>`;
+        itemsGrid.appendChild(card);
+      });
     };
 
     // Fondo animado
