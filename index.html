@@ -10,8 +10,6 @@
     a{color:inherit;text-decoration:none}
 
     .topbar{background:#f60;color:#fff;padding:10px 18px;text-align:center;font-weight:700;position:relative}
-
-    /* Robux display */
     #robuxDisplay{position:absolute;top:6px;right:20px;display:flex;align-items:center;gap:6px;font-weight:bold;color:#00aa00}
     #robuxDisplay img{width:26px;height:26px}
 
@@ -22,14 +20,9 @@
     .upgrade{display:inline-block;background:#08f;color:#fff;padding:8px 10px;border-radius:4px;margin-top:12px}
 
     .main{flex:1;padding:18px;background:#fafafa}
-
     .banner{height:120px;background-image:url('/mnt/data/59983a73-6d5c-45b0-9e3d-d39c2935bedf.png');background-size:cover;background-position:center;margin-bottom:12px;border-radius:4px}
 
-    .catalog{display:flex}
-    .filters{width:180px;margin-right:18px}
-    .filters h3{margin:0 0 8px}
     .items{flex:1}
-
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
     .card{background:#fff;border:1px solid #ddd;padding:10px;border-radius:6px;text-align:center;cursor:pointer;transition:transform 0.15s}
     .card:hover{transform:scale(1.04)}
@@ -45,6 +38,8 @@
     input[type=text],input[type=password],input[type=email]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
     button{padding:8px 12px;border:0;border-radius:6px;background:#0666ff;color:#fff;cursor:pointer}
     .muted{color:#666;font-size:13px}
+
+    @media (max-width:800px){.sidebar{display:none}.banner{height:90px}}
   </style>
 </head>
 <body>
@@ -63,7 +58,8 @@
       <div class="banner" aria-hidden="true"></div>
 
       <section class="items">
-        <h3>Catálogo</h3>
+        <h3 id="sectionTitle">Catálogo</h3>
+        <div id="controls"></div>
         <div id="itemsGrid" class="grid"></div>
       </section>
     </main>
@@ -80,8 +76,8 @@
     </div>
   </div>
 
-  <!-- Firebase -->
   <script type="module">
+    // Firebase config (provided)
     const firebaseConfig = {
       apiKey: "AIzaSyBwj_as6pb5Bg81F9Cl9VWTKkekMM9Exfk",
       authDomain: "pekora-forum.firebaseapp.com",
@@ -94,12 +90,15 @@
 
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
-    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
+    import {
+      getFirestore, collection, addDoc, onSnapshot, doc, getDoc, updateDoc, setDoc, getDocs, query, orderBy
+    } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    // UI refs
     const authOverlay = document.getElementById('authOverlay');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
@@ -109,96 +108,123 @@
     const itemsGrid = document.getElementById('itemsGrid');
     const robuxAmount = document.getElementById('robuxAmount');
     const inventoryLink = document.getElementById('inventoryLink');
+    const controls = document.getElementById('controls');
+    const sectionTitle = document.getElementById('sectionTitle');
 
     let currentUser = null;
     let viewingInventory = false;
+    let itemsUnsub = null;
 
-    // Login/Register
+    // Auth handlers
     registerBtn.addEventListener('click', async()=>{
-      try{await createUserWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert(e.message)}
+      try{await createUserWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert('Error: '+e.message)}
     });
     loginBtn.addEventListener('click', async()=>{
-      try{await signInWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert(e.message)}
+      try{await signInWithEmailAndPassword(auth,emailInput.value.trim(),passwordInput.value);}catch(e){alert('Error: '+e.message)}
     });
     logoutBtn.addEventListener('click', async()=>{await signOut(auth);});
 
     onAuthStateChanged(auth, async user=>{
-      currentUser=user;
-      if(user){authOverlay.style.display='none';initApp();}
-      else{authOverlay.style.display='flex';itemsGrid.innerHTML='';robuxAmount.textContent='0';}
+      currentUser = user;
+      if(user){
+        authOverlay.style.display = 'none';
+        await initApp();
+      } else {
+        authOverlay.style.display = 'flex';
+        itemsGrid.innerHTML = '';
+        robuxAmount.textContent = '0';
+        controls.innerHTML = '';
+        sectionTitle.textContent = 'Catálogo';
+        if(itemsUnsub){itemsUnsub(); itemsUnsub = null}
+      }
     });
 
     async function initApp(){
-      // initialize robux
-      const balDoc = doc(db,'users',currentUser.uid);
-      await setDoc(balDoc,{robux:1000},{merge:true});
-      onSnapshot(balDoc,snap=>{if(snap.exists())robuxAmount.textContent=snap.data().robux||0});
+      // Ensure user doc exists with robux balance
+      const userRef = doc(db,'users',currentUser.uid);
+      await setDoc(userRef,{email:currentUser.email,robux:1000},{merge:true});
+      // Listen to balance
+      onSnapshot(userRef,snap=>{if(snap.exists())robuxAmount.textContent = snap.data().robux ?? 0});
 
-      if(currentUser.email==='kinzudev@gmail.com') enableAdminAdd();
-      loadItems();
+      controls.innerHTML = '';
+      if(currentUser.email === 'kinzudev@gmail.com'){
+        const btn = document.createElement('button'); btn.textContent = 'Agregar ítem';
+        btn.onclick = adminAddItem; controls.appendChild(btn);
+      }
+
+      // Default view: catálogo
+      viewingInventory = false;
+      sectionTitle.textContent = 'Catálogo';
+      loadItemsRealtime();
     }
 
-    function enableAdminAdd(){
-      const addBtn=document.createElement('button');
-      addBtn.textContent='Agregar ítem';
-      addBtn.style.margin='10px 0';
-      addBtn.onclick=async()=>{
-        const title=prompt('Nombre del ítem:');
-        if(!title)return;
-        const image=prompt('URL de imagen:');
-        const price=parseInt(prompt('Precio R$:'))||0;
-        const rap=parseInt(prompt('RAP (valor estimado):'))||0;
-        await addDoc(collection(db,'items'),{title,image,price,rap});
-      };
-      document.querySelector('.items').prepend(addBtn);
+    function adminAddItem(){
+      const title = prompt('Nombre del ítem (aparecerá arriba del tag):');
+      if(!title) return;
+      const image = prompt('URL de la imagen:') || '';
+      const price = parseInt(prompt('Precio (R$):') || '0',10);
+      const rap = parseInt(prompt('RAP (valor estimado):') || '0',10);
+      addDoc(collection(db,'items'),{title,image,price,rap,created: Date.now()}).then(()=>alert('Ítem agregado')).catch(e=>alert('Error: '+e.message));
     }
 
-    function loadItems(){
-      const col=collection(db,'items');
-      onSnapshot(col,snap=>{
-        itemsGrid.innerHTML='';
-        snap.forEach(docSnap=>{
-          const d=docSnap.data();
-          const c=document.createElement('div');
-          c.className='card';
-          c.innerHTML=`<img src="${d.image||''}"><div class="title">${d.title}</div><div class="tag">RAP: ${d.rap||0}</div><div class="price">R$${d.price}</div>`;
-          c.onclick=()=>buyItem(docSnap.id,d);
-          itemsGrid.appendChild(c);
+    function loadItemsRealtime(){
+      if(itemsUnsub) itemsUnsub();
+      const q = query(collection(db,'items'), orderBy('created','desc'));
+      itemsUnsub = onSnapshot(q, snap=>{
+        itemsGrid.innerHTML = '';
+        snap.forEach(s=>{
+          const d = s.data();
+          const card = document.createElement('div'); card.className='card';
+          card.innerHTML = `\n            <img src="${escapeHtml(d.image||'https://via.placeholder.com/150')}" alt="">\n            <div class="title">${escapeHtml(d.title||'Sin título')}</div>\n            <div class="tag">RAP: ${d.rap||0}</div>\n            <div class="price">R$${d.price||0}</div>`;
+          card.onclick = ()=>buyItem(s.id,d);
+          itemsGrid.appendChild(card);
         });
-      });
+      }, err=>{console.error(err); alert('Error cargando items: '+err.message)});
     }
 
     async function buyItem(id,data){
-      if(!currentUser)return alert('Inicia sesión');
-      const userDoc=doc(db,'users',currentUser.uid);
-      const snap=await (await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js')).getDoc(userDoc);
-      let robux=snap.exists()?snap.data().robux||0:0;
-      if(robux<data.price)return alert('No tienes Robux suficientes');
-      robux-=data.price;
-      await updateDoc(userDoc,{robux});
-      const invCol=collection(db,'users',currentUser.uid,'inventory');
-      await addDoc(invCol,data);
-      alert('Item comprado');
+      if(!currentUser) return alert('Inicia sesión para comprar');
+      try{
+        const userRef = doc(db,'users',currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        const balance = (userSnap.exists() && userSnap.data().robux) ? userSnap.data().robux : 0;
+        if(balance < (data.price||0)) return alert('No tienes Robux suficientes');
+        // deduct
+        await updateDoc(userRef,{robux: balance - (data.price||0)});
+        // add to inventory
+        await addDoc(collection(db,'users',currentUser.uid,'inventory'),{itemId:id,title:data.title,image:data.image,price:data.price,rap:data.rap,purchasedAt:Date.now()});
+        alert('Compra exitosa');
+      }catch(e){console.error(e);alert('Error al comprar: '+e.message)}
     }
 
-    inventoryLink.addEventListener('click',()=>{
-      if(!currentUser)return;
-      viewingInventory=!viewingInventory;
-      if(viewingInventory)showInventory();else loadItems();
+    inventoryLink.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      if(!currentUser) return alert('Inicia sesión');
+      viewingInventory = !viewingInventory;
+      if(viewingInventory){
+        sectionTitle.textContent = 'Inventario';
+        if(itemsUnsub){itemsUnsub(); itemsUnsub = null}
+        await showInventory();
+      } else {
+        sectionTitle.textContent = 'Catálogo';
+        loadItemsRealtime();
+      }
     });
 
     async function showInventory(){
-      const invCol=collection(db,'users',currentUser.uid,'inventory');
-      const docs=await getDocs(invCol);
-      itemsGrid.innerHTML='';
-      docs.forEach(docSnap=>{
-        const d=docSnap.data();
-        const c=document.createElement('div');
-        c.className='card';
-        c.innerHTML=`<img src="${d.image||''}"><div class="title">${d.title}</div><div class="tag">RAP: ${d.rap||0}</div><div class="price">R$${d.price}</div>`;
-        itemsGrid.appendChild(c);
-      });
+      itemsGrid.innerHTML = '';
+      try{
+        const invSnap = await getDocs(collection(db,'users',currentUser.uid,'inventory'));
+        invSnap.forEach(s=>{
+          const d = s.data();
+          const card = document.createElement('div'); card.className='card';
+          card.innerHTML = `\n            <img src="${escapeHtml(d.image||'https://via.placeholder.com/150')}" alt="">\n            <div class="title">${escapeHtml(d.title||'Sin título')}</div>\n            <div class="tag">RAP: ${d.rap||0}</div>\n            <div class="price">R$${d.price||0}</div>`;
+          itemsGrid.appendChild(card);
+        });
+      }catch(e){console.error(e);alert('Error cargando inventario: '+e.message)}
     }
+
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]})}
   </script>
 </body>
 </html>
