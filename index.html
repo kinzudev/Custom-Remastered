@@ -449,7 +449,7 @@ onAuthStateChanged(auth, user => {
   
   // Crear botón animado Tix
   const tixBtn = document.createElement("img");
-  tixBtn.src = localStorage.getItem("tixLogo") || "https://static.wikia.nocookie.net/tixfactorytycoon/images/d/d0/Tix.png/revision/latest/scale-to-width-down/1200?cb=20231018063816";
+  tixBtn.src = localStorage.getItem("tixLogo") || "https://vp3zjvjttshy6341ql6o.c.websim.com/tix.png";
   tixBtn.id = "tixBtn";
   document.body.appendChild(tixBtn);
 
@@ -458,7 +458,7 @@ onAuthStateChanged(auth, user => {
   panel.id = "tixPanel";
   panel.innerHTML = `
     <div class="tix-header">
-      <img id="tixPanelLogo" src="${localStorage.getItem("tixPanelLogo") || 'https://static.wikia.nocookie.net/tixfactorytycoon/images/d/d0/Tix.png/revision/latest/scale-to-width-down/1200?cb=20231018063816'}" />
+      <img id="tixPanelLogo" src="${localStorage.getItem("tixPanelLogo") || 'https://vp3zjvjttshy6341ql6o.c.websim.com/tix.png'}" />
       <h2 id="tixPanelTitle">${localStorage.getItem("tixPanelTitle") || 'Tix Evento'}</h2>
     </div>
     <div id="tixContent"></div>
